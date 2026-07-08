@@ -1,25 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useState, Suspense, lazy } from 'react';
 import { AppProvider, useApp } from './lib/AppContext';
 import { RouterProvider, useRouter, Link } from './lib/Router';
-import { t } from './lib/i18n';
 import { 
   Home, Camera, MessageCircle, FolderOpen, Search, 
   Calendar, Shield, Users, Settings
 } from 'lucide-react';
 
-// Pages
+// Static imports for critical pages (needed immediately)
 import { AuthPage } from './components/Auth';
-import { OnboardingPage } from './components/Onboarding';
 import { HomePage } from './pages/HomePage';
-import { ScanPage } from './pages/ScanPage';
-import { ChatPage } from './pages/ChatPage';
-import { VaultPage } from './pages/VaultPage';
-import { SchemesPage } from './pages/SchemesPage';
-import { ApplicationsPage } from './pages/ApplicationsPage';
-import { RemindersPage } from './pages/RemindersPage';
-import { ScamPage } from './pages/ScamPage';
-import { FamilyPage } from './pages/FamilyPage';
-import { SettingsPage } from './pages/SettingsPage';
+
+// Lazy load all other pages for faster initial load
+const OnboardingPage = lazy(() => import('./components/Onboarding').then(m => ({ default: m.OnboardingPage })));
+const ScanPage = lazy(() => import('./pages/ScanPage'));
+const ChatPage = lazy(() => import('./pages/ChatPage'));
+const VaultPage = lazy(() => import('./pages/VaultPage'));
+const SchemesPage = lazy(() => import('./pages/SchemesPage'));
+const ApplicationsPage = lazy(() => import('./pages/ApplicationsPage'));
+const RemindersPage = lazy(() => import('./pages/RemindersPage'));
+const ScamPage = lazy(() => import('./pages/ScamPage'));
+const FamilyPage = lazy(() => import('./pages/FamilyPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+
+// Loading fallback
+function PageLoader() {
+  return (
+    <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-3 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-gray-500 text-sm">Loading...</p>
+      </div>
+    </div>
+  );
+}
 
 // Bottom Navigation Items
 const NAV_ITEMS = [
@@ -45,37 +58,35 @@ const NAV_ITEMS_FULL = [
 
 function AppContent() {
   const { user, isLoading, profile, simpleMode } = useApp();
-  const { currentPath, navigate } = useRouter();
+  const { currentPath } = useRouter();
   const [showFullNav, setShowFullNav] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
 
-  // Determine which nav to show based on screen size / mode
   const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
 
   // Auth state is loading
-  if (isLoading || !authChecked) {
-    // Check if we need to show auth page
-    if (!isLoading) {
-      setAuthChecked(true);
-    }
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-500">Loading...</p>
+          <div className="w-12 h-12 border-3 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // Auth pages (no nav) - if not logged in, show auth page
+  // Auth pages (no nav)
   if (!user) {
     return <AuthPage />;
   }
 
-  // Onboarding - if logged in but hasn't completed onboarding
+  // Onboarding
   if (!profile?.onboarding_completed) {
-    return <OnboardingPage />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <OnboardingPage />
+      </Suspense>
+    );
   }
 
   // Main app with bottom nav
@@ -105,7 +116,6 @@ function AppContent() {
           );
         })}
         
-        {/* More button for compact nav */}
         {!showFullNav && (
           <button
             onClick={() => setShowFullNav(true)}
@@ -170,34 +180,39 @@ function AppContent() {
 }
 
 function PageRouter({ currentPath }: { currentPath: string }) {
-  // Simple path matching
+  // Lazy-loaded pages with Suspense for smooth transitions
+  const lazyPage = (Page: React.ComponentType) => (
+    <Suspense fallback={<PageLoader />}>
+      <Page />
+    </Suspense>
+  );
+
   switch (currentPath) {
     case '/':
       return <HomePage />;
     case '/scan':
-      return <ScanPage />;
+      return lazyPage(ScanPage);
     case '/chat':
-      return <ChatPage />;
+      return lazyPage(ChatPage);
     case '/vault':
-      return <VaultPage />;
+      return lazyPage(VaultPage);
     case '/schemes':
-      return <SchemesPage />;
+      return lazyPage(SchemesPage);
     case '/apps':
-      return <ApplicationsPage />;
+      return lazyPage(ApplicationsPage);
     case '/reminders':
-      return <RemindersPage />;
+      return lazyPage(RemindersPage);
     case '/scam':
-      return <ScamPage />;
+      return lazyPage(ScamPage);
     case '/family':
-      return <FamilyPage />;
+      return lazyPage(FamilyPage);
     case '/settings':
-      return <SettingsPage />;
+      return lazyPage(SettingsPage);
     case '/auth':
       return <AuthPage />;
     default:
-      // Check for dynamic routes
       if (currentPath.startsWith('/schemes/')) {
-        return <SchemesPage />;
+        return lazyPage(SchemesPage);
       }
       return <HomePage />;
   }
