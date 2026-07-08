@@ -1,79 +1,209 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
+import { AppProvider, useApp } from './lib/AppContext';
+import { RouterProvider, useRouter, Link } from './lib/Router';
+import { t } from './lib/i18n';
+import { 
+  Home, Camera, MessageCircle, FolderOpen, Search, 
+  Calendar, Shield, Users, Settings
+} from 'lucide-react';
 
-const phrases = [
-  "Dream it. Build it.",
-  "Ideas become reality here.",
-  "Your canvas awaits.",
-  "Let's create something amazing.",
-  "From zero to wow.",
+// Pages
+import { AuthPage } from './components/Auth';
+import { OnboardingPage } from './components/Onboarding';
+import { HomePage } from './pages/HomePage';
+import { ScanPage } from './pages/ScanPage';
+import { ChatPage } from './pages/ChatPage';
+import { VaultPage } from './pages/VaultPage';
+import { SchemesPage } from './pages/SchemesPage';
+import { ApplicationsPage } from './pages/ApplicationsPage';
+import { RemindersPage } from './pages/RemindersPage';
+import { ScamPage } from './pages/ScamPage';
+import { FamilyPage } from './pages/FamilyPage';
+import { SettingsPage } from './pages/SettingsPage';
+
+// Bottom Navigation Items
+const NAV_ITEMS = [
+  { path: '/', icon: Home, label: 'Home' },
+  { path: '/scan', icon: Camera, label: 'Scan' },
+  { path: '/chat', icon: MessageCircle, label: 'Chat' },
+  { path: '/vault', icon: FolderOpen, label: 'Vault' },
+  { path: '/schemes', icon: Search, label: 'Schemes' },
 ];
 
-function DoableLogo({ className = "" }: { className?: string }) {
+const NAV_ITEMS_FULL = [
+  { path: '/', icon: Home, label: 'Home' },
+  { path: '/scan', icon: Camera, label: 'Scan' },
+  { path: '/chat', icon: MessageCircle, label: 'AI Chat' },
+  { path: '/vault', icon: FolderOpen, label: 'Vault' },
+  { path: '/schemes', icon: Search, label: 'Schemes' },
+  { path: '/apps', icon: Calendar, label: 'Apps' },
+  { path: '/reminders', icon: Calendar, label: 'Reminders' },
+  { path: '/scam', icon: Shield, label: 'Scam' },
+  { path: '/family', icon: Users, label: 'Family' },
+  { path: '/settings', icon: Settings, label: 'Settings' },
+];
+
+function AppContent() {
+  const { user, isLoading, profile, simpleMode } = useApp();
+  const { currentPath, navigate } = useRouter();
+  const [showFullNav, setShowFullNav] = useState(false);
+
+  // Determine which nav to show based on screen size / mode
+  const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
+
+  // Auth guard
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Auth pages (no nav)
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  // Onboarding
+  if (!profile?.onboarding_completed) {
+    return <OnboardingPage />;
+  }
+
+  // Main app with bottom nav
   return (
-    <svg viewBox="0 0 40 40" fill="none" className={className}>
-      <rect width="40" height="40" rx="10" className="fill-[#F97316]">
-        <animate attributeName="rx" values="10;14;10" dur="3s" repeatCount="indefinite" />
-      </rect>
-      <text x="50%" y="54%" dominantBaseline="middle" textAnchor="middle" className="fill-white" style={{ fontSize: "22px", fontWeight: 700, fontFamily: "system-ui" }}>
-        D
-      </text>
-    </svg>
+    <div className={simpleMode ? 'simple-mode' : ''}>
+      {/* Page Content */}
+      <div className="pb-20">
+        <PageRouter currentPath={currentPath} />
+      </div>
+
+      {/* Bottom Navigation */}
+      <nav className="bottom-nav">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = currentPath === item.path || 
+            (item.path !== '/' && currentPath.startsWith(item.path));
+          
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`bottom-nav-item ${isActive ? 'active' : ''}`}
+            >
+              <Icon className="w-6 h-6" />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+        
+        {/* More button for compact nav */}
+        {!showFullNav && (
+          <button
+            onClick={() => setShowFullNav(true)}
+            className="bottom-nav-item"
+          >
+            <span className="text-xl">⋯</span>
+            <span>More</span>
+          </button>
+        )}
+      </nav>
+
+      {/* More Menu */}
+      {showFullNav && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40"
+          onClick={() => setShowFullNav(false)}
+        >
+          <div 
+            className="absolute bottom-20 left-0 right-0 bg-white rounded-t-3xl p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-[#1A1A2E]">More Options</h3>
+              <button
+                onClick={() => setShowFullNav(false)}
+                className="text-gray-400 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-4">
+              {NAV_ITEMS_FULL.slice(5).map((item) => {
+                const Icon = item.icon;
+                const isActive = currentPath === item.path;
+                
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setShowFullNav(false)}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-xl ${
+                      isActive ? 'bg-[#1B3A6B]/10 text-[#1B3A6B]' : 'text-gray-500'
+                    }`}
+                  >
+                    <Icon className="w-6 h-6" />
+                    <span className="text-xs font-medium">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Disclaimer Footer */}
+      <footer className="disclaimer pb-4">
+        Bharat Lens provides AI-assisted guidance and is not affiliated with the Government of India. 
+        Always verify critical actions through official sources.
+      </footer>
+    </div>
   );
 }
 
+function PageRouter({ currentPath }: { currentPath: string }) {
+  // Simple path matching
+  switch (currentPath) {
+    case '/':
+      return <HomePage />;
+    case '/scan':
+      return <ScanPage />;
+    case '/chat':
+      return <ChatPage />;
+    case '/vault':
+      return <VaultPage />;
+    case '/schemes':
+      return <SchemesPage />;
+    case '/apps':
+      return <ApplicationsPage />;
+    case '/reminders':
+      return <RemindersPage />;
+    case '/scam':
+      return <ScamPage />;
+    case '/family':
+      return <FamilyPage />;
+    case '/settings':
+      return <SettingsPage />;
+    case '/auth':
+      return <AuthPage />;
+    default:
+      // Check for dynamic routes
+      if (currentPath.startsWith('/schemes/')) {
+        return <SchemesPage />;
+      }
+      return <HomePage />;
+  }
+}
+
 export default function App() {
-  const [phraseIndex, setPhraseIndex] = useState(0);
-  const [opacity, setOpacity] = useState(1);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setOpacity(0);
-      setTimeout(() => {
-        setPhraseIndex((i) => (i + 1) % phrases.length);
-        setOpacity(1);
-      }, 400);
-    }, 3500);
-    return () => clearInterval(interval);
-  }, []);
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-neutral-50 via-stone-100 to-white dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950">
-      <div className="text-center space-y-6">
-        <div className="flex justify-center">
-          <DoableLogo className="w-16 h-16 drop-shadow-lg" />
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight text-neutral-900 dark:text-white">
-            Doable
-          </h1>
-          <p
-            className="text-lg text-[#F97316] font-medium transition-opacity duration-400"
-            style={{ opacity, transitionDuration: "400ms" }}
-          >
-            {phrases[phraseIndex]}
-          </p>
-        </div>
-
-        <div className="flex justify-center pt-2">
-          <div className="flex gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="w-1.5 h-1.5 rounded-full bg-[#F97316]"
-                style={{
-                  animation: `pulse 1.4s ease-in-out ${i * 0.2}s infinite`,
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-      <style>{`
-        @keyframes pulse {
-          0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-          40% { opacity: 1; transform: scale(1.2); }
-        }
-      `}</style>
-    </div>
+    <AppProvider>
+      <RouterProvider>
+        <AppContent />
+      </RouterProvider>
+    </AppProvider>
   );
 }

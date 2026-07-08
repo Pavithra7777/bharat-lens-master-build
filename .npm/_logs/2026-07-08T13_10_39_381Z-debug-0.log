@@ -1,0 +1,20 @@
+0 verbose cli /usr/bin/node /usr/bin/npm
+1 info using npm@10.9.8
+2 info using node@v22.22.3
+3 silly config load:file:/usr/lib/node_modules/npm/npmrc
+4 silly config load:file:/work/.npmrc
+5 silly config load:file:/usr/etc/npmrc
+6 verbose title npm install react-router-dom zustand @tanstack/react-query
+7 verbose argv "install" "react-router-dom" "zustand" "@tanstack/react-query"
+8 verbose logfile logs-max:10 dir:/work/.npm/_logs/2026-07-08T13_10_39_381Z-
+9 verbose logfile /work/.npm/_logs/2026-07-08T13_10_39_381Z-debug-0.log
+10 silly logfile done cleaning log files
+11 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with EAI_AGAIN
+12 silly packumentCache heap:271581184 maxSize:67895296 maxEntrySize:33947648
+13 silly idealTree buildDeps
+14 silly fetch manifest react-router-dom@*
+15 silly packumentCache full:https://registry.npmjs.org/react-router-dom cache-miss
+16 http fetch GET https://registry.npmjs.org/react-router-dom attempt 1 failed with EAI_AGAIN
+17 verbose shrinkwrap failed to load node_modules/.package-lock.json out of date, updated: node_modules
+18 http fetch GET https://registry.npmjs.org/npm attempt 2 failed with EAI_AGAIN
+19 http fetch GET https://registry.npmjs.org/react-router-dom attempt 2 failed with EAI_AGAIN
