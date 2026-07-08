@@ -3,19 +3,42 @@ import { db } from '@doable/data';
 import { ai, type ChatMessage } from '@doable/ai';
 import { useApp } from '../lib/AppContext';
 import { Link } from '../lib/Router';
-import { Search, Filter, ChevronRight, ExternalLink, CheckCircle, MapPin, Users, Briefcase, GraduationCap, Heart, Home, Sparkles, Loader2, Plus, X, SlidersHorizontal } from 'lucide-react';
+import { Search, Filter, ChevronRight, ExternalLink, CheckCircle, MapPin, Users, Briefcase, GraduationCap, Heart, Home, Sparkles, Loader2, Plus, X, SlidersHorizontal, Shield, FileText, Clock } from 'lucide-react';
 
 interface Scheme {
   id: string;
   title: string;
   description: string;
-  eligibility_criteria: any;
-  required_documents: string[];
-  applicable_states: string[];
-  official_url: string;
-  department: string;
-  source_verified_at: string;
-  category_tags?: string[];
+  short_benefit?: string;
+  category: string;
+  gender?: string;
+  min_age?: number;
+  max_age?: number;
+  category_eligible?: string[];
+  income_limit?: number;
+  professions?: string[];
+  student_levels?: string[];
+  student_streams?: string[];
+  education_percentage_min?: number;
+  employment_status?: string[];
+  business_type?: string[];
+  domicile_required?: boolean;
+  applicable_states?: string[];
+  coverage?: string;
+  benefit_type?: string;
+  benefit_amount_min?: number;
+  benefit_amount_max?: number;
+  benefit_amount_text?: string;
+  required_documents?: string[];
+  application_mode?: string[];
+  official_url?: string;
+  helpline?: string;
+  department?: string;
+  ministry?: string;
+  source_verified_at?: string;
+  is_active?: boolean;
+  created_at?: string;
+  tags?: string[];
 }
 
 interface AISchemeSearchResult {
@@ -41,6 +64,8 @@ const CATEGORIES = [
   { id: 'minority', icon: '🌍', label: 'Minority' },
   { id: 'disability', icon: '♿', label: 'Disability' },
   { id: 'employment', icon: '💻', label: 'Employment' },
+  { id: 'agriculture', icon: '🌱', label: 'Agriculture' },
+  { id: 'education', icon: '📚', label: 'Education' },
 ];
 
 export function SchemesPage() {
@@ -74,6 +99,67 @@ export function SchemesPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Map database category to filter category
+  function mapCategoryToFilter(category: string): string {
+    const cat = category.toLowerCase();
+    if (cat.includes('farm') || cat.includes('agri')) return 'farmer';
+    if (cat.includes('student') || cat.includes('scholarship') || cat.includes('education')) return 'student';
+    if (cat.includes('women') || cat.includes('gender')) return 'women';
+    if (cat.includes('housing') || cat.includes('home')) return 'housing';
+    if (cat.includes('health') || cat.includes('medical') || cat.includes('insurance')) return 'health';
+    if (cat.includes('business') || cat.includes('entrepreneur') || cat.includes('mudra') || cat.includes('startup')) return 'business';
+    if (cat.includes('elderly') || cat.includes('senior') || cat.includes('pension')) return 'elderly';
+    if (cat.includes('minority') || cat.includes('minorities')) return 'minority';
+    if (cat.includes('disability') || cat.includes('disabled')) return 'disability';
+    if (cat.includes('employment') || cat.includes('job') || cat.includes('skill')) return 'employment';
+    return cat;
+  }
+
+  // Check if a scheme belongs to a category
+  function matchesCategorySingle(scheme: Scheme, categoryId: string): boolean {
+    if (categoryId === 'all') return true;
+    
+    const category = (scheme.category || '').toLowerCase();
+    const professions = scheme.professions || [];
+    const categoryEligible = scheme.category_eligible || [];
+    const tags = scheme.tags || [];
+    const title = scheme.title.toLowerCase();
+    const description = scheme.description?.toLowerCase() || '';
+    
+    // Check category field
+    if (mapCategoryToFilter(category) === categoryId) return true;
+    
+    // Check professions array
+    if (professions.some(p => p.toLowerCase().includes(categoryId))) return true;
+    
+    // Check category_eligible array
+    if (categoryEligible.some(c => c.toLowerCase().includes(categoryId))) return true;
+    
+    // Check tags array
+    if (tags.some(t => t.toLowerCase().includes(categoryId))) return true;
+    
+    // Check title/description for keyword matches
+    const keywords: Record<string, string[]> = {
+      'farmer': ['farmer', 'kisan', 'agriculture', 'crop', 'farming'],
+      'student': ['student', 'scholarship', 'education', 'college', 'school'],
+      'women': ['women', 'girl', 'mother', 'widow'],
+      'housing': ['housing', 'home', '住', 'gruh'],
+      'health': ['health', 'medical', 'hospital', 'ayushman', 'insurance'],
+      'business': ['business', 'entrepreneur', 'mudra', 'startup', 'loan'],
+      'elderly': ['elderly', 'senior', 'pension', 'old age'],
+      'minority': ['minority', 'muslim', 'christian', 'sikh', 'budhist'],
+      'disability': ['disability', 'disabled', 'handicap'],
+      'employment': ['employment', 'job', 'skill', 'training', 'rojgar'],
+      'agriculture': ['agriculture', 'farmer', 'crop', 'kisan', 'fasal'],
+      'education': ['education', 'student', 'scholarship', 'college'],
+    };
+    
+    const kws = keywords[categoryId] || [];
+    if (kws.some(kw => title.includes(kw) || description.includes(kw))) return true;
+    
+    return false;
   }
 
   // Calculate scheme counts per category
@@ -132,7 +218,6 @@ If no specific schemes match, return an empty array [].`;
         responseText += token;
       }
       
-      // Parse the JSON response
       try {
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
@@ -160,45 +245,35 @@ If no specific schemes match, return an empty array [].`;
     setAddingScheme(scheme.title);
     
     try {
-      const eligibilityCriteria: any = {};
-      
-      // Map category to eligibility criteria
       const cat = scheme.category?.toLowerCase() || '';
+      let professions: string[] = [];
+      let categoryEligible: string[] = [];
+      
       if (cat.includes('farmer') || scheme.eligibility.some(e => e.toLowerCase().includes('farmer'))) {
-        eligibilityCriteria.occupation = ['farmer'];
+        professions = ['farmer'];
       } else if (cat.includes('student') || scheme.eligibility.some(e => e.toLowerCase().includes('student'))) {
-        eligibilityCriteria.occupation = ['student'];
-      } else if (cat.includes('entrepreneur') || cat.includes('business') || scheme.eligibility.some(e => e.toLowerCase().includes('entrepreneur') || e.toLowerCase().includes('business'))) {
-        eligibilityCriteria.occupation = ['entrepreneur'];
+        professions = ['student'];
+      } else if (cat.includes('entrepreneur') || cat.includes('business')) {
+        professions = ['entrepreneur'];
       }
-      if (cat.includes('women') || scheme.eligibility.some(e => e.toLowerCase().includes('women'))) {
-        eligibilityCriteria.category = [...(eligibilityCriteria.category || []), 'women'];
-      }
-      if (cat.includes('elderly') || cat.includes('senior')) {
-        eligibilityCriteria.category = [...(eligibilityCriteria.category || []), 'elderly'];
-      }
-      if (cat.includes('sc') || cat.includes('st') || cat.includes('tribe')) {
-        eligibilityCriteria.category = [...(eligibilityCriteria.category || []), 'sc_st'];
-      }
-      if (cat.includes('minority')) {
-        eligibilityCriteria.category = [...(eligibilityCriteria.category || []), 'minority'];
-      }
-      if (cat.includes('disability') || cat.includes('disabled')) {
-        eligibilityCriteria.category = [...(eligibilityCriteria.category || []), 'disability'];
-      }
+      
+      if (cat.includes('women')) categoryEligible.push('women');
+      if (cat.includes('sc') || cat.includes('st')) categoryEligible.push('sc_st');
+      if (cat.includes('minority')) categoryEligible.push('minority');
 
       await db.query(
-        `INSERT INTO schemes (title, description, eligibility_criteria, required_documents, applicable_states, official_url, department, source_verified_at, is_active, category_tags)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE, true, $8)`,
+        `INSERT INTO schemes (title, description, category, professions, category_eligible, required_documents, applicable_states, official_url, department, source_verified_at, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, true)`,
         [
           scheme.title,
           scheme.description,
-          JSON.stringify(eligibilityCriteria),
+          cat,
+          professions,
+          categoryEligible,
           scheme.documents,
           ['All India'],
           scheme.url,
           scheme.department,
-          scheme.category ? [scheme.category] : []
         ]
       );
       
@@ -208,46 +283,6 @@ If no specific schemes match, return an empty array [].`;
       console.error('Failed to add scheme:', error);
     } finally {
       setAddingScheme(null);
-    }
-  }
-
-  function matchesCategorySingle(scheme: Scheme, categoryId: string): boolean {
-    if (categoryId === 'all') return true;
-    
-    const criteria = scheme.eligibility_criteria || {};
-    const tags = scheme.category_tags || [];
-    const occ = criteria.occupation || [];
-    const cats = criteria.category || [];
-    
-    // Check category_tags first
-    if (tags.includes(categoryId)) return true;
-    
-    // Also check in eligibility criteria
-    switch (categoryId) {
-      case 'farmer': 
-        return occ.includes('farmer') || tags.includes('farmer');
-      case 'student': 
-        return occ.includes('student') || tags.includes('student');
-      case 'women': 
-        return cats.includes('women') || tags.includes('women');
-      case 'housing': 
-        return tags.includes('housing') || scheme.title.toLowerCase().includes('housing') || scheme.title.toLowerCase().includes('home');
-      case 'health': 
-        return cats.includes('health') || tags.includes('health') || occ.includes('health');
-      case 'business': 
-        return occ.includes('entrepreneur') || tags.includes('business');
-      case 'elderly': 
-        return cats.includes('elderly') || tags.includes('elderly');
-      case 'sc_st': 
-        return cats.includes('sc_st') || tags.includes('sc_st');
-      case 'minority': 
-        return cats.includes('minority') || tags.includes('minority');
-      case 'disability': 
-        return cats.includes('disability') || tags.includes('disability');
-      case 'employment': 
-        return occ.includes('employment') || tags.includes('employment');
-      default: 
-        return true;
     }
   }
 
@@ -262,18 +297,30 @@ If no specific schemes match, return an empty array [].`;
     return (
       scheme.title.toLowerCase().includes(query) ||
       scheme.description?.toLowerCase().includes(query) ||
-      scheme.department?.toLowerCase().includes(query)
+      scheme.department?.toLowerCase().includes(query) ||
+      scheme.category?.toLowerCase().includes(query)
     );
   }
 
   function matchesProfile(scheme: Scheme): boolean {
     if (!profile) return true;
     
-    const criteria = scheme.eligibility_criteria || {};
+    // Check occupation match
+    if (scheme.professions && profile.occupation_category) {
+      const occ = scheme.professions.map(p => p.toLowerCase());
+      const userOcc = profile.occupation_category.toLowerCase();
+      if (!occ.some(o => o.includes(userOcc) || userOcc.includes(o))) {
+        return false;
+      }
+    }
     
-    if (criteria.occupation && profile.occupation_category) {
-      const occ = Array.isArray(criteria.occupation) ? criteria.occupation : [criteria.occupation];
-      if (!occ.includes(profile.occupation_category)) return false;
+    // Check state eligibility
+    if (scheme.applicable_states && profile.state) {
+      const states = scheme.applicable_states.map(s => s.toLowerCase());
+      const userState = profile.state.toLowerCase();
+      if (!states.some(s => s.includes('all') || s.includes(userState))) {
+        return false;
+      }
     }
     
     return true;
@@ -307,7 +354,7 @@ If no specific schemes match, return an empty array [].`;
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold text-white">Government Schemes</h1>
-            <p className="text-white/70 text-sm mt-1">Verified schemes from official sources</p>
+            <p className="text-white/70 text-sm mt-1">{schemes.length} verified schemes from official sources</p>
           </div>
           <button
             onClick={() => setShowAiPanel(true)}
@@ -348,7 +395,7 @@ If no specific schemes match, return an empty array [].`;
               tab === 'for-you' ? 'bg-white text-[#1B3A6B]' : 'bg-white/20 text-white'
             }`}
           >
-            For You {forYouSchemes.length > 0 && `(${forYouSchemes.length})`}
+            For You
           </button>
           <button
             onClick={() => setTab('all')}
@@ -356,54 +403,12 @@ If no specific schemes match, return an empty array [].`;
               tab === 'all' ? 'bg-white text-[#1B3A6B]' : 'bg-white/20 text-white'
             }`}
           >
-            All Schemes ({filteredSchemes.length})
+            All Schemes
           </button>
         </div>
       </div>
 
-      {/* Filter Panel */}
-      {showFilters && (
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-[#1A1A2E]">Filter by Category</h3>
-            <button
-              onClick={() => setSelectedCategories(['all'])}
-              className="text-sm text-[#1B3A6B] hover:underline"
-            >
-              Clear all
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => toggleCategory(cat.id)}
-                className={`px-3 py-2.5 rounded-xl text-sm font-medium transition flex items-center justify-between ${
-                  selectedCategories.includes(cat.id)
-                    ? 'bg-[#1B3A6B] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <span className="flex items-center gap-1.5">
-                  <span>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                </span>
-                {categoryCounts[cat.id] !== undefined && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                    selectedCategories.includes(cat.id)
-                      ? 'bg-white/20'
-                      : 'bg-gray-200'
-                  }`}>
-                    {categoryCounts[cat.id]}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Quick Categories (Horizontal Scroll) */}
+      {/* Category Quick Filters */}
       <div className="px-6 py-3 overflow-x-auto bg-white border-b border-gray-100">
         <div className="flex gap-2">
           {CATEGORIES.map((cat) => (
@@ -421,7 +426,7 @@ If no specific schemes match, return an empty array [].`;
             >
               <span>{cat.icon}</span>
               <span>{cat.label}</span>
-              {categoryCounts[cat.id] !== undefined && (
+              {categoryCounts[cat.id] > 0 && (
                 <span className={`text-xs px-1.5 py-0.5 rounded-full ${
                   selectedCategories.includes(cat.id)
                     ? 'bg-white/20'
@@ -449,79 +454,157 @@ If no specific schemes match, return an empty array [].`;
                 {cat.icon} {cat.label}
                 <button
                   onClick={() => toggleCategory(catId)}
-                  className="ml-1 hover:bg-[#1B3A6B]/20 rounded-full p-0.5"
+                  className="ml-1 hover:text-red-500"
                 >
                   <X className="w-3 h-3" />
                 </button>
               </span>
             ) : null;
           })}
+          <button
+            onClick={() => setSelectedCategories(['all'])}
+            className="text-xs text-[#1B3A6B] hover:underline"
+          >
+            Clear all
+          </button>
         </div>
       )}
 
-      <div className="px-6 py-4">
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 bg-gray-100 rounded-xl skeleton" />
-            ))}
-          </div>
-        ) : displayedSchemes.length === 0 ? (
-          <div className="text-center py-12">
-            <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No schemes found matching your criteria</p>
+      {/* Filter Panel */}
+      {showFilters && (
+        <div className="px-6 py-4 bg-white border-b border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-medium text-[#1A1A2E]">Filter by Category</h3>
             <button
-              onClick={() => {
-                setSelectedCategories(['all']);
-                setSearch('');
-              }}
-              className="mt-4 px-4 py-2 bg-[#1B3A6B] text-white rounded-lg text-sm font-medium"
+              onClick={() => setShowFilters(false)}
+              className="text-gray-400 hover:text-gray-600"
             >
-              Clear Filters
+              <X className="w-5 h-5" />
             </button>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {displayedSchemes.map((scheme) => (
+          <div className="grid grid-cols-2 gap-2">
+            {CATEGORIES.map((cat) => (
               <button
-                key={scheme.id}
-                onClick={() => setSelectedScheme(scheme)}
-                className="w-full bg-white rounded-xl p-4 border border-gray-100 text-left hover:border-[#1B3A6B]/30 transition"
+                key={cat.id}
+                onClick={() => toggleCategory(cat.id)}
+                className={`px-3 py-2.5 rounded-xl text-sm font-medium transition flex items-center justify-between ${
+                  selectedCategories.includes(cat.id)
+                    ? 'bg-[#1B3A6B] text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
               >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="verified-badge verified">
-                        ✓ Verified
-                      </span>
-                      {scheme.category_tags?.map(tag => {
-                        const cat = CATEGORIES.find(c => c.id === tag);
-                        return cat ? (
-                          <span key={tag} className="text-xs px-2 py-0.5 bg-gray-100 rounded-full">
-                            {cat.icon} {cat.label}
-                          </span>
-                        ) : null;
-                      })}
-                    </div>
-                    <h3 className="font-semibold text-[#1A1A2E]">{scheme.title}</h3>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400" />
-                </div>
-                <p className="text-sm text-gray-500 line-clamp-2 mb-3">{scheme.description}</p>
-                <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
-                  <span className="px-2 py-1 bg-gray-100 rounded">{scheme.department}</span>
-                  {scheme.applicable_states?.includes('All India') && (
-                    <span className="px-2 py-1 bg-green-50 text-green-600 rounded">All India</span>
-                  )}
-                  <span className="text-gray-400">
-                    {scheme.source_verified_at && new Date(scheme.source_verified_at).toLocaleDateString('en-IN', {
-                      day: 'numeric', month: 'short', year: 'numeric'
-                    })}
-                  </span>
-                </div>
+                <span className="flex items-center gap-1.5">
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                </span>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  selectedCategories.includes(cat.id)
+                    ? 'bg-white/20'
+                    : 'bg-gray-200'
+                }`}>
+                  {categoryCounts[cat.id]}
+                </span>
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Scheme Count */}
+      <div className="px-6 py-3 bg-white">
+        <p className="text-sm text-gray-500">
+          Showing {displayedSchemes.length} scheme{displayedSchemes.length !== 1 ? 's' : ''}
+          {tab === 'for-you' && profile && ' based on your profile'}
+        </p>
+      </div>
+
+      {/* Schemes List */}
+      <div className="px-6 py-4 space-y-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-[#1B3A6B] animate-spin" />
+          </div>
+        ) : displayedSchemes.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="font-medium text-gray-600 mb-2">No schemes found</h3>
+            <p className="text-sm text-gray-400">Try adjusting your filters or search query</p>
+          </div>
+        ) : (
+          displayedSchemes.map((scheme) => (
+            <button
+              key={scheme.id}
+              onClick={() => setSelectedScheme(scheme)}
+              className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-left hover:shadow-md transition"
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex-1">
+                  <div className="flex flex-wrap gap-1 mb-1">
+                    {scheme.tags?.slice(0, 3).map((tag) => (
+                      <span key={tag} className="text-xs px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] rounded-full">
+                        {tag}
+                      </span>
+                    ))}
+                    {scheme.professions?.slice(0, 2).map((prof) => (
+                      <span key={prof} className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
+                        {prof}
+                      </span>
+                    ))}
+                  </div>
+                  <h3 className="font-semibold text-[#1A1A2E]">{scheme.title}</h3>
+                </div>
+                <ChevronRight className="w-5 h-5 text-gray-400" />
+              </div>
+              <p className="text-sm text-gray-500 line-clamp-2 mb-3">{scheme.description}</p>
+              
+              {/* Quick Info */}
+              <div className="flex flex-wrap gap-2 text-xs text-gray-400 mb-3">
+                {scheme.department && (
+                  <span className="px-2 py-1 bg-gray-100 rounded flex items-center gap-1">
+                    <Briefcase className="w-3 h-3" />
+                    {scheme.department}
+                  </span>
+                )}
+                {scheme.benefit_type && (
+                  <span className="px-2 py-1 bg-green-50 text-green-600 rounded flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    {scheme.benefit_type}
+                  </span>
+                )}
+                {scheme.required_documents && scheme.required_documents.length > 0 && (
+                  <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded flex items-center gap-1">
+                    <FileText className="w-3 h-3" />
+                    {scheme.required_documents.length} docs
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex items-center justify-between text-xs text-gray-400">
+                <div className="flex items-center gap-2">
+                  {scheme.applicable_states?.includes('All India') ? (
+                    <span className="px-2 py-1 bg-green-50 text-green-600 rounded flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      All India
+                    </span>
+                  ) : scheme.applicable_states && scheme.applicable_states.length > 0 ? (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {scheme.applicable_states.slice(0, 2).join(', ')}
+                      {scheme.applicable_states.length > 2 && ` +${scheme.applicable_states.length - 2}`}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {scheme.source_verified_at && new Date(scheme.source_verified_at).toLocaleDateString('en-IN', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                  })}
+                </span>
+              </div>
+            </button>
+          ))
         )}
       </div>
 
@@ -701,22 +784,33 @@ If no specific schemes match, return an empty array [].`;
                 onClick={() => setSelectedScheme(null)}
                 className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"
               >
-                ✕
+                <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             
             <div className="p-6 space-y-6">
               {/* Category Tags */}
-              {selectedScheme.category_tags && selectedScheme.category_tags.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {selectedScheme.category_tags.map(tag => {
-                    const cat = CATEGORIES.find(c => c.id === tag);
-                    return cat ? (
-                      <span key={tag} className="px-3 py-1 bg-[#1B3A6B]/10 text-[#1B3A6B] rounded-full text-sm">
-                        {cat.icon} {cat.label}
-                      </span>
-                    ) : null;
-                  })}
+              <div className="flex flex-wrap gap-2">
+                {selectedScheme.tags?.map(tag => (
+                  <span key={tag} className="px-3 py-1 bg-[#1B3A6B]/10 text-[#1B3A6B] rounded-full text-sm">
+                    {tag}
+                  </span>
+                ))}
+                {selectedScheme.professions?.map(prof => (
+                  <span key={prof} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">
+                    {prof}
+                  </span>
+                ))}
+              </div>
+              
+              {/* Benefit Type */}
+              {selectedScheme.benefit_type && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl">
+                  <Shield className="w-5 h-5 text-green-600" />
+                  <span className="font-medium text-green-800">{selectedScheme.benefit_type}</span>
+                  {selectedScheme.benefit_amount_text && (
+                    <span className="text-green-600">- {selectedScheme.benefit_amount_text}</span>
+                  )}
                 </div>
               )}
               
@@ -738,6 +832,14 @@ If no specific schemes match, return an empty array [].`;
                 <p className="text-gray-600 leading-relaxed">{selectedScheme.description}</p>
               </div>
               
+              {/* Short Benefit */}
+              {selectedScheme.short_benefit && (
+                <div className="p-4 bg-[#1B3A6B]/5 rounded-xl">
+                  <h3 className="font-medium text-[#1B3A6B] mb-1">Key Benefit</h3>
+                  <p className="text-gray-700">{selectedScheme.short_benefit}</p>
+                </div>
+              )}
+              
               {/* Eligibility */}
               <div>
                 <h3 className="font-semibold text-[#1A1A2E] mb-3 flex items-center gap-2">
@@ -745,25 +847,40 @@ If no specific schemes match, return an empty array [].`;
                   Who can apply?
                 </h3>
                 <div className="space-y-2">
-                  {selectedScheme.eligibility_criteria?.occupation?.map((occ: string) => (
-                    <div key={occ} className="flex items-center gap-2">
-                      <span className="w-2 h-2 bg-[#0F9D58] rounded-full" />
-                      <span className="text-gray-600 capitalize">{occ.replace('_', ' ')}</span>
+                  {selectedScheme.professions && selectedScheme.professions.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-600">Professions: {selectedScheme.professions.join(', ')}</span>
                     </div>
-                  ))}
-                  {selectedScheme.applicable_states?.map((state: string) => (
+                  )}
+                  {selectedScheme.category_eligible && selectedScheme.category_eligible.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-gray-400" />
+                      <span className="text-gray-600">Categories: {selectedScheme.category_eligible.join(', ')}</span>
+                    </div>
+                  )}
+                  {selectedScheme.applicable_states && selectedScheme.applicable_states.map((state: string) => (
                     <div key={state} className="flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-gray-400" />
                       <span className="text-gray-600">{state}</span>
                     </div>
                   ))}
+                  {selectedScheme.income_limit && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">₹</span>
+                      <span className="text-gray-600">Income limit: ₹{selectedScheme.income_limit.toLocaleString('en-IN')}/year</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
               {/* Required Documents */}
-              {selectedScheme.required_documents?.length > 0 && (
+              {selectedScheme.required_documents && selectedScheme.required_documents.length > 0 && (
                 <div>
-                  <h3 className="font-semibold text-[#1A1A2E] mb-3">Documents typically needed</h3>
+                  <h3 className="font-semibold text-[#1A1A2E] mb-3 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-blue-500" />
+                    Documents typically needed
+                  </h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedScheme.required_documents.map((doc: string) => (
                       <span key={doc} className="px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600">
@@ -774,17 +891,50 @@ If no specific schemes match, return an empty array [].`;
                 </div>
               )}
               
+              {/* Application Mode */}
+              {selectedScheme.application_mode && selectedScheme.application_mode.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-[#1A1A2E] mb-2">How to apply</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedScheme.application_mode.map((mode: string) => (
+                      <span key={mode} className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-sm">
+                        {mode}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Helpline */}
+              {selectedScheme.helpline && (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <span>Helpline:</span>
+                  <a href={`tel:${selectedScheme.helpline}`} className="text-[#1B3A6B] hover:underline">
+                    {selectedScheme.helpline}
+                  </a>
+                </div>
+              )}
+              
               {/* CTA */}
               <div className="space-y-3 pt-4">
-                <a
-                  href={selectedScheme.official_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-4 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2"
+                {selectedScheme.official_url && (
+                  <a
+                    href={selectedScheme.official_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-4 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2"
+                  >
+                    Apply on Official Website
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+                <Link
+                  to="/applications"
+                  className="w-full py-4 bg-green-600 text-white rounded-xl font-medium flex items-center justify-center gap-2"
                 >
-                  Open Official Website
-                  <ExternalLink className="w-4 h-4" />
-                </a>
+                  <CheckCircle className="w-4 h-4" />
+                  Track This Application
+                </Link>
                 <p className="text-xs text-gray-400 text-center">
                   You will be redirected to the official government portal
                 </p>
