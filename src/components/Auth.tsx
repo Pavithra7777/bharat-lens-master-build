@@ -16,7 +16,7 @@ export function AuthPage() {
   const [emailTouched, setEmailTouched] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
   
-  const { refreshProfile, user } = useApp();
+  const { user } = useApp();
   const { navigate } = useRouter();
 
   // Redirect if already logged in
@@ -37,14 +37,12 @@ export function AuthPage() {
       
       // Check for invalid credentials
       if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('auth')) {
-        // Try to determine if it's email or password based on what's missing
         if (!email.trim()) {
           return { message: 'Please enter your email address', type: 'email' };
         }
         if (!password.trim()) {
           return { message: 'Please enter your password', type: 'password' };
         }
-        // Generic bad credentials - be helpful without revealing which field is wrong
         return { 
           message: 'Incorrect email or password. Please check your credentials and try again.', 
           type: 'general' 
@@ -67,7 +65,7 @@ export function AuthPage() {
         };
       }
       
-      // Email already exists (for signup)
+      // Email already exists
       if (msg.includes('email') && (msg.includes('already') || msg.includes('exist'))) {
         return { 
           message: 'An account with this email already exists. Try logging in instead.', 
@@ -75,7 +73,7 @@ export function AuthPage() {
         };
       }
       
-      // Rate limiting or too many attempts
+      // Rate limiting
       if (msg.includes('rate') || msg.includes('too many') || msg.includes('attempt')) {
         return { 
           message: 'Too many attempts. Please wait a few minutes before trying again.', 
@@ -115,7 +113,6 @@ export function AuthPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     
-    // Validate before submitting
     if (!validateEmail(email)) {
       setError('Please enter a valid email address');
       setErrorType('email');
@@ -142,7 +139,7 @@ export function AuthPage() {
       if (isLogin) {
         const result = await db.auth.login({ email, password });
         if (result.ok) {
-          await refreshProfile();
+          // Navigate immediately - profile loads in background
           navigate('/');
         } else {
           const friendlyError = getFriendlyErrorMessage(result);
@@ -152,7 +149,7 @@ export function AuthPage() {
       } else {
         const result = await db.auth.signup({ email, password, name });
         if (result.ok) {
-          await refreshProfile();
+          // Navigate immediately - profile loads in background
           navigate('/onboarding');
         } else {
           const friendlyError = getFriendlyErrorMessage(result);
