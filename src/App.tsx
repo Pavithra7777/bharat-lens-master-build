@@ -1,4 +1,4 @@
-import { useState, Suspense, lazy } from 'react';
+import { useState } from 'react';
 import { AppProvider, useApp } from './lib/AppContext';
 import { RouterProvider, useRouter, Link } from './lib/Router';
 import { 
@@ -6,33 +6,19 @@ import {
   Calendar, Shield, Users, Settings
 } from 'lucide-react';
 
-// Static imports for critical pages (needed immediately)
+// Static imports
 import { AuthPage } from './components/Auth';
+import { OnboardingPage } from './components/Onboarding';
 import { HomePage } from './pages/HomePage';
-
-// Lazy load all other pages for faster initial load
-const OnboardingPage = lazy(() => import('./components/Onboarding').then(m => ({ default: m.OnboardingPage })));
-const ScanPage = lazy(() => import('./pages/ScanPage'));
-const ChatPage = lazy(() => import('./pages/ChatPage'));
-const VaultPage = lazy(() => import('./pages/VaultPage'));
-const SchemesPage = lazy(() => import('./pages/SchemesPage'));
-const ApplicationsPage = lazy(() => import('./pages/ApplicationsPage'));
-const RemindersPage = lazy(() => import('./pages/RemindersPage'));
-const ScamPage = lazy(() => import('./pages/ScamPage'));
-const FamilyPage = lazy(() => import('./pages/FamilyPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-
-// Loading fallback
-function PageLoader() {
-  return (
-    <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-12 h-12 border-3 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-gray-500 text-sm">Loading...</p>
-      </div>
-    </div>
-  );
-}
+import { ScanPage } from './pages/ScanPage';
+import { ChatPage } from './pages/ChatPage';
+import { VaultPage } from './pages/VaultPage';
+import { SchemesPage } from './pages/SchemesPage';
+import { ApplicationsPage } from './pages/ApplicationsPage';
+import { RemindersPage } from './pages/RemindersPage';
+import { ScamPage } from './pages/ScamPage';
+import { FamilyPage } from './pages/FamilyPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 // Bottom Navigation Items
 const NAV_ITEMS = [
@@ -63,41 +49,31 @@ function AppContent() {
 
   const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
 
-  // Auth state is loading
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-3 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-3" />
+          <div className="w-12 h-12 border-4 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-3" />
           <p className="text-gray-500 text-sm">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // Auth pages (no nav)
   if (!user) {
     return <AuthPage />;
   }
 
-  // Onboarding
   if (!profile?.onboarding_completed) {
-    return (
-      <Suspense fallback={<PageLoader />}>
-        <OnboardingPage />
-      </Suspense>
-    );
+    return <OnboardingPage />;
   }
 
-  // Main app with bottom nav
   return (
     <div className={simpleMode ? 'simple-mode' : ''}>
-      {/* Page Content */}
       <div className="pb-20">
         <PageRouter currentPath={currentPath} />
       </div>
 
-      {/* Bottom Navigation */}
       <nav className="bottom-nav">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -127,7 +103,6 @@ function AppContent() {
         )}
       </nav>
 
-      {/* More Menu */}
       {showFullNav && (
         <div 
           className="fixed inset-0 bg-black/50 z-40"
@@ -170,7 +145,6 @@ function AppContent() {
         </div>
       )}
 
-      {/* Disclaimer Footer */}
       <footer className="disclaimer pb-4">
         Bharat Lens provides AI-assisted guidance and is not affiliated with the Government of India. 
         Always verify critical actions through official sources.
@@ -180,39 +154,32 @@ function AppContent() {
 }
 
 function PageRouter({ currentPath }: { currentPath: string }) {
-  // Lazy-loaded pages with Suspense for smooth transitions
-  const lazyPage = (Page: React.ComponentType) => (
-    <Suspense fallback={<PageLoader />}>
-      <Page />
-    </Suspense>
-  );
-
   switch (currentPath) {
     case '/':
       return <HomePage />;
     case '/scan':
-      return lazyPage(ScanPage);
+      return <ScanPage />;
     case '/chat':
-      return lazyPage(ChatPage);
+      return <ChatPage />;
     case '/vault':
-      return lazyPage(VaultPage);
+      return <VaultPage />;
     case '/schemes':
-      return lazyPage(SchemesPage);
+      return <SchemesPage />;
     case '/apps':
-      return lazyPage(ApplicationsPage);
+      return <ApplicationsPage />;
     case '/reminders':
-      return lazyPage(RemindersPage);
+      return <RemindersPage />;
     case '/scam':
-      return lazyPage(ScamPage);
+      return <ScamPage />;
     case '/family':
-      return lazyPage(FamilyPage);
+      return <FamilyPage />;
     case '/settings':
-      return lazyPage(SettingsPage);
+      return <SettingsPage />;
     case '/auth':
       return <AuthPage />;
     default:
       if (currentPath.startsWith('/schemes/')) {
-        return lazyPage(SchemesPage);
+        return <SchemesPage />;
       }
       return <HomePage />;
   }
