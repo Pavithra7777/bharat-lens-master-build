@@ -47,12 +47,17 @@ function AppContent() {
   const { user, isLoading, profile, simpleMode } = useApp();
   const { currentPath, navigate } = useRouter();
   const [showFullNav, setShowFullNav] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   // Determine which nav to show based on screen size / mode
   const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
 
-  // Auth guard
-  if (isLoading) {
+  // Auth state is loading
+  if (isLoading || !authChecked) {
+    // Check if we need to show auth page
+    if (!isLoading) {
+      setAuthChecked(true);
+    }
     return (
       <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
         <div className="text-center">
@@ -63,12 +68,12 @@ function AppContent() {
     );
   }
 
-  // Auth pages (no nav)
+  // Auth pages (no nav) - if not logged in, show auth page
   if (!user) {
     return <AuthPage />;
   }
 
-  // Onboarding
+  // Onboarding - if logged in but hasn't completed onboarding
   if (!profile?.onboarding_completed) {
     return <OnboardingPage />;
   }

@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { useRouter } from '../lib/Router';
-import { t, type Language } from '../lib/i18n';
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -12,14 +11,131 @@ export function AuthPage() {
   const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [errorType, setErrorType] = useState<'email' | 'password' | 'general' | null>(null);
   const [loading, setLoading] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
   
-  const { refreshProfile } = useApp();
+  const { refreshProfile, user } = useApp();
   const { navigate } = useRouter();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/');
+    }
+  }, [user, navigate]);
+
+  function validateEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  function getFriendlyErrorMessage(result: { ok: boolean; message?: string }): { message: string; type: 'email' | 'password' | 'general' } {
+    if (!result.ok && result.message) {
+      const msg = result.message.toLowerCase();
+      
+      // Check for invalid credentials
+      if (msg.includes('invalid') || msg.includes('credentials') || msg.includes('auth')) {
+        // Try to determine if it's email or password based on what's missing
+        if (!email.trim()) {
+          return { message: 'Please enter your email address', type: 'email' };
+        }
+        if (!password.trim()) {
+          return { message: 'Please enter your password', type: 'password' };
+        }
+        // Generic bad credentials - be helpful without revealing which field is wrong
+        return { 
+          message: 'Incorrect email or password. Please check your credentials and try again.', 
+          type: 'general' 
+        };
+      }
+      
+      // User not found
+      if (msg.includes('user') && (msg.includes('not found') || msg.includes('exist') || msg.includes('invalid'))) {
+        return { 
+          message: 'No account found with this email. Please check your email or sign up for a new account.', 
+          type: 'email' 
+        };
+      }
+      
+      // Wrong password
+      if (msg.includes('password') && (msg.includes('wrong') || msg.includes('incorrect') || msg.includes('invalid'))) {
+        return { 
+          message: 'Incorrect password. Please try again or use "Forgot Password" to reset it.', 
+          type: 'password' 
+        };
+      }
+      
+      // Email already exists (for signup)
+      if (msg.includes('email') && (msg.includes('already') || msg.includes('exist'))) {
+        return { 
+          message: 'An account with this email already exists. Try logging in instead.', 
+          type: 'email' 
+        };
+      }
+      
+      // Rate limiting or too many attempts
+      if (msg.includes('rate') || msg.includes('too many') || msg.includes('attempt')) {
+        return { 
+          message: 'Too many attempts. Please wait a few minutes before trying again.', 
+          type: 'general' 
+        };
+      }
+    }
+    
+    return { message: 'Something went wrong. Please try again.', type: 'general' };
+  }
+
+  function getInlineValidation(): string | null {
+    if (!emailTouched && !passwordTouched) return null;
+    
+    if (isLogin) {
+      if (emailTouched && email && !validateEmail(email)) {
+        return 'Please enter a valid email address';
+      }
+      if (passwordTouched && password && password.length < 6) {
+        return 'Password must be at least 6 characters';
+      }
+    } else {
+      if (emailTouched && email && !validateEmail(email)) {
+        return 'Please enter a valid email address';
+      }
+      if (passwordTouched && password && password.length < 6) {
+        return 'Password must be at least 6 characters';
+      }
+      if (name && name.trim().length < 2) {
+        return 'Name must be at least 2 characters';
+      }
+    }
+    
+    return null;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    
+    // Validate before submitting
+    if (!validateEmail(email)) {
+      setError('Please enter a valid email address');
+      setErrorType('email');
+      return;
+    }
+    
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      setErrorType('password');
+      return;
+    }
+    
+    if (!isLogin && name.trim().length < 2) {
+      setError('Please enter your full name');
+      setErrorType('general');
+      return;
+    }
+
     setError('');
+    setErrorType(null);
     setLoading(true);
 
     try {
@@ -29,7 +145,9 @@ export function AuthPage() {
           await refreshProfile();
           navigate('/');
         } else {
-          setError(result.message || 'Invalid credentials');
+          const friendlyError = getFriendlyErrorMessage(result);
+          setError(friendlyError.message);
+          setErrorType(friendlyError.type);
         }
       } else {
         const result = await db.auth.signup({ email, password, name });
@@ -37,15 +155,20 @@ export function AuthPage() {
           await refreshProfile();
           navigate('/onboarding');
         } else {
-          setError(result.message || 'Sign up failed');
+          const friendlyError = getFriendlyErrorMessage(result);
+          setError(friendlyError.message);
+          setErrorType(friendlyError.type);
         }
       }
     } catch (err) {
-      setError('Something went wrong. Please try again.');
+      setError('Something went wrong. Please check your connection and try again.');
+      setErrorType('general');
     } finally {
       setLoading(false);
     }
   }
+
+  const inlineError = getInlineValidation();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1B3A6B] to-[#2A4A8B] flex flex-col items-center justify-center p-6">
@@ -73,32 +196,65 @@ export function AuthPage() {
                 placeholder="Full Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent outline-none transition"
+                onBlur={() => {
+                  if (name) setEmailTouched(true);
+                }}
+                className={`w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition ${
+                  errorType === 'general' && name && name.trim().length < 2
+                    ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                    : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
+                }`}
                 required={!isLogin}
               />
             </div>
           )}
 
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Mail className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${
+              errorType === 'email' ? 'text-red-400' : 'text-gray-400'
+            }`} />
             <input
               type="email"
               placeholder="Email Address"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent outline-none transition"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (errorType === 'email') {
+                  setError('');
+                  setErrorType(null);
+                }
+              }}
+              onBlur={() => setEmailTouched(true)}
+              className={`w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition ${
+                errorType === 'email'
+                  ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                  : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
+              }`}
               required
             />
           </div>
 
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${
+              errorType === 'password' ? 'text-red-400' : 'text-gray-400'
+            }`} />
             <input
               type={showPassword ? 'text' : 'password'}
               placeholder="Password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent outline-none transition"
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (errorType === 'password') {
+                  setError('');
+                  setErrorType(null);
+                }
+              }}
+              onBlur={() => setPasswordTouched(true)}
+              className={`w-full pl-10 pr-12 py-3 border rounded-xl outline-none transition ${
+                errorType === 'password'
+                  ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                  : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
+              }`}
               required
               minLength={6}
             />
@@ -111,9 +267,19 @@ export function AuthPage() {
             </button>
           </div>
 
+          {/* Inline Validation Error */}
+          {inlineError && !error && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{inlineError}</span>
+            </div>
+          )}
+
+          {/* Main Error Message */}
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-              {error}
+            <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -138,6 +304,9 @@ export function AuthPage() {
             onClick={() => {
               setIsLogin(!isLogin);
               setError('');
+              setErrorType(null);
+              setEmailTouched(false);
+              setPasswordTouched(false);
             }}
             className="text-[#1B3A6B] font-medium hover:underline"
           >
