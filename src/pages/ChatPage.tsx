@@ -23,6 +23,7 @@ export function ChatPage() {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generatingAnswer, setGeneratingAnswer] = useState(false);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -66,6 +67,7 @@ export function ChatPage() {
     setMessages(prev => [...prev, userMsg]);
     
     setLoading(true);
+    setGeneratingAnswer(true);
 
     try {
       // Build context for AI
@@ -108,6 +110,7 @@ Current language preference: ${language}`;
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
+      setGeneratingAnswer(false);
     }
   }
 
@@ -193,7 +196,7 @@ Current language preference: ${language}`;
           </div>
           <button
             onClick={startNewChat}
-            className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center"
+            className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition"
           >
             <Plus className="w-5 h-5 text-white" />
           </button>
@@ -234,7 +237,7 @@ Current language preference: ${language}`;
               className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                 msg.role === 'user'
                   ? 'bg-[#1B3A6B] text-white rounded-br-md'
-                  : 'bg-white border border-gray-100 rounded-bl-md'
+                  : 'bg-white border border-gray-100 rounded-bl-md shadow-sm'
               }`}
             >
               <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
@@ -250,16 +253,22 @@ Current language preference: ${language}`;
           </div>
         ))}
 
-        {loading && (
+        {generatingAnswer && (
           <div className="flex justify-start">
-            <div className="bg-white border border-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-6 py-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className="w-8 h-8 bg-[#1B3A6B] rounded-full flex items-center justify-center">
+                    <MessageCircle className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                  </div>
                 </div>
-                <span className="text-sm text-gray-500">Thinking...</span>
+                <div>
+                  <p className="text-sm font-medium text-[#1B3A6B]">Generating answer...</p>
+                  <p className="text-xs text-gray-400">Please wait a moment</p>
+                </div>
               </div>
             </div>
           </div>
@@ -287,7 +296,7 @@ Current language preference: ${language}`;
             onClick={isListening ? () => recognitionRef.current?.stop() : startListening}
             className={`w-12 h-12 rounded-xl flex items-center justify-center transition ${
               isListening
-                ? 'bg-red-500 text-white'
+                ? 'bg-red-500 text-white animate-pulse'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -297,10 +306,12 @@ Current language preference: ${language}`;
           <button
             onClick={handleSend}
             disabled={!message.trim() || loading}
-            className="w-12 h-12 bg-[#1B3A6B] text-white rounded-xl flex items-center justify-center disabled:opacity-50"
+            className="w-14 h-14 bg-[#1B3A6B] text-white rounded-xl flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#2A4A8B] transition shadow-md"
           >
             {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
             ) : (
               <Send className="w-5 h-5" />
             )}

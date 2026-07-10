@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { useRouter } from '../lib/Router';
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, AlertCircle, CheckCircle } from 'lucide-react';
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -15,6 +15,7 @@ export function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [emailTouched, setEmailTouched] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
   
   const { user, setUser } = useApp();
   const { navigate } = useRouter();
@@ -25,6 +26,17 @@ export function AuthPage() {
       navigate('/');
     }
   }, [user, navigate]);
+
+  // Immediate redirect on login success
+  useEffect(() => {
+    if (loginSuccess) {
+      // Small delay for success feedback, then redirect
+      const timer = setTimeout(() => {
+        navigate('/');
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [loginSuccess, navigate]);
 
   function validateEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -139,12 +151,10 @@ export function AuthPage() {
       if (isLogin) {
         const result = await db.auth.login({ email, password });
         if (result.ok) {
-          // Set user immediately in context, then navigate after state updates
+          // Set user in context
           setUser({ id: result.userId || email, email });
-          // Use queueMicrotask to ensure state updates before navigation
-          queueMicrotask(() => {
-            navigate('/');
-          });
+          // Show success and trigger redirect
+          setLoginSuccess(true);
         } else {
           const friendlyError = getFriendlyErrorMessage(result);
           setError(friendlyError.message);
@@ -153,12 +163,11 @@ export function AuthPage() {
       } else {
         const result = await db.auth.signup({ email, password, name });
         if (result.ok) {
-          // Set user immediately in context, then navigate after state updates
+          // Set user in context
           setUser({ id: result.userId || email, email, name });
-          // Use queueMicrotask to ensure state updates before navigation
-          queueMicrotask(() => {
-            navigate('/onboarding');
-          });
+          // Redirect to onboarding for new users
+          setLoginSuccess(true);
+          setTimeout(() => navigate('/onboarding'), 300);
         } else {
           const friendlyError = getFriendlyErrorMessage(result);
           setError(friendlyError.message);
@@ -169,7 +178,9 @@ export function AuthPage() {
       setError('Something went wrong. Please check your connection and try again.');
       setErrorType('general');
     } finally {
-      setLoading(false);
+      if (!loginSuccess) {
+        setLoading(false);
+      }
     }
   }
 
@@ -188,136 +199,155 @@ export function AuthPage() {
 
       {/* Form Card */}
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-6">
-        <h2 className="text-xl font-semibold text-[#1A1A2E] mb-6 text-center">
-          {isLogin ? 'Welcome Back' : 'Create Account'}
-        </h2>
+        {loginSuccess ? (
+          // Success State - immediate visual feedback before redirect
+          <div className="text-center py-8">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+              <CheckCircle className="w-8 h-8 text-green-600" />
+            </div>
+            <h2 className="text-xl font-semibold text-[#1A1A2E] mb-2">
+              {isLogin ? 'Welcome back!' : 'Account created!'}
+            </h2>
+            <p className="text-gray-500">Redirecting you now...</p>
+            <div className="mt-4 flex justify-center">
+              <div className="w-8 h-8 border-3 border-[#1B3A6B] border-t-transparent rounded-full animate-spin" />
+            </div>
+          </div>
+        ) : (
+          // Login/Signup Form
+          <>
+            <h2 className="text-xl font-semibold text-[#1A1A2E] mb-6 text-center">
+              {isLogin ? 'Welcome Back' : 'Create Account'}
+            </h2>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Full Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={() => {
-                  if (name) setEmailTouched(true);
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {!isLogin && (
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Full Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    onBlur={() => {
+                      if (name) setEmailTouched(true);
+                    }}
+                    className={`w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition ${
+                      errorType === 'general' && name && name.trim().length < 2
+                        ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                        : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
+                    }`}
+                    required={!isLogin}
+                  />
+                </div>
+              )}
+
+              <div className="relative">
+                <Mail className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${
+                  errorType === 'email' ? 'text-red-400' : 'text-gray-400'
+                }`} />
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errorType === 'email') {
+                      setError('');
+                      setErrorType(null);
+                    }
+                  }}
+                  onBlur={() => setEmailTouched(true)}
+                  className={`w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition ${
+                    errorType === 'email'
+                      ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                      : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
+                  }`}
+                  required
+                />
+              </div>
+
+              <div className="relative">
+                <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${
+                  errorType === 'password' ? 'text-red-400' : 'text-gray-400'
+                }`} />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errorType === 'password') {
+                      setError('');
+                      setErrorType(null);
+                    }
+                  }}
+                  onBlur={() => setPasswordTouched(true)}
+                  className={`w-full pl-10 pr-12 py-3 border rounded-xl outline-none transition ${
+                    errorType === 'password'
+                      ? 'border-red-400 focus:ring-2 focus:ring-red-200'
+                      : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
+                  }`}
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+
+              {/* Inline Validation Error */}
+              {inlineError && !error && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{inlineError}</span>
+                </div>
+              )}
+
+              {/* Main Error Message */}
+              {error && (
+                <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-[#1B3A6B] text-white rounded-xl font-medium hover:bg-[#2A4A8B] transition flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    {isLogin ? 'Log In' : 'Sign Up'}
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError('');
+                  setErrorType(null);
+                  setEmailTouched(false);
+                  setPasswordTouched(false);
                 }}
-                className={`w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition ${
-                  errorType === 'general' && name && name.trim().length < 2
-                    ? 'border-red-400 focus:ring-2 focus:ring-red-200'
-                    : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
-                }`}
-                required={!isLogin}
-              />
+                className="text-[#1B3A6B] font-medium hover:underline"
+              >
+                {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Log In'}
+              </button>
             </div>
-          )}
-
-          <div className="relative">
-            <Mail className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${
-              errorType === 'email' ? 'text-red-400' : 'text-gray-400'
-            }`} />
-            <input
-              type="email"
-              placeholder="Email Address"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (errorType === 'email') {
-                  setError('');
-                  setErrorType(null);
-                }
-              }}
-              onBlur={() => setEmailTouched(true)}
-              className={`w-full pl-10 pr-4 py-3 border rounded-xl outline-none transition ${
-                errorType === 'email'
-                  ? 'border-red-400 focus:ring-2 focus:ring-red-200'
-                  : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
-              }`}
-              required
-            />
-          </div>
-
-          <div className="relative">
-            <Lock className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 ${
-              errorType === 'password' ? 'text-red-400' : 'text-gray-400'
-            }`} />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (errorType === 'password') {
-                  setError('');
-                  setErrorType(null);
-                }
-              }}
-              onBlur={() => setPasswordTouched(true)}
-              className={`w-full pl-10 pr-12 py-3 border rounded-xl outline-none transition ${
-                errorType === 'password'
-                  ? 'border-red-400 focus:ring-2 focus:ring-red-200'
-                  : 'border-gray-200 focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent'
-              }`}
-              required
-              minLength={6}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
-
-          {/* Inline Validation Error */}
-          {inlineError && !error && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{inlineError}</span>
-            </div>
-          )}
-
-          {/* Main Error Message */}
-          {error && (
-            <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-[#1B3A6B] text-white rounded-xl font-medium hover:bg-[#2A4A8B] transition flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? (
-              <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                {isLogin ? 'Log In' : 'Sign Up'}
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError('');
-              setErrorType(null);
-              setEmailTouched(false);
-              setPasswordTouched(false);
-            }}
-            className="text-[#1B3A6B] font-medium hover:underline"
-          >
-            {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Log In'}
-          </button>
-        </div>
+          </>
+        )}
       </div>
 
       {/* Language hint */}
