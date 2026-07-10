@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './lib/AppContext';
 import { RouterProvider, useRouter, Link } from './lib/Router';
 import { 
@@ -46,6 +46,13 @@ function AppContent() {
   const { user, isLoading, profile, simpleMode } = useApp();
   const { currentPath } = useRouter();
   const [showFullNav, setShowFullNav] = useState(false);
+
+  // Redirect to home when user logs in
+  useEffect(() => {
+    if (user && currentPath === '/auth') {
+      window.location.hash = '/';
+    }
+  }, [user, currentPath]);
 
   const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
 

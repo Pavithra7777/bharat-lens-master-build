@@ -16,7 +16,7 @@ export function AuthPage() {
   const [emailTouched, setEmailTouched] = useState(false);
   const [passwordTouched, setPasswordTouched] = useState(false);
   
-  const { user } = useApp();
+  const { user, setUser } = useApp();
   const { navigate } = useRouter();
 
   // Redirect if already logged in
@@ -139,8 +139,12 @@ export function AuthPage() {
       if (isLogin) {
         const result = await db.auth.login({ email, password });
         if (result.ok) {
-          // Navigate immediately - profile loads in background
-          navigate('/');
+          // Set user immediately in context, then navigate after state updates
+          setUser({ id: result.userId || email, email });
+          // Use queueMicrotask to ensure state updates before navigation
+          queueMicrotask(() => {
+            navigate('/');
+          });
         } else {
           const friendlyError = getFriendlyErrorMessage(result);
           setError(friendlyError.message);
@@ -149,8 +153,12 @@ export function AuthPage() {
       } else {
         const result = await db.auth.signup({ email, password, name });
         if (result.ok) {
-          // Navigate immediately - profile loads in background
-          navigate('/onboarding');
+          // Set user immediately in context, then navigate after state updates
+          setUser({ id: result.userId || email, email, name });
+          // Use queueMicrotask to ensure state updates before navigation
+          queueMicrotask(() => {
+            navigate('/onboarding');
+          });
         } else {
           const friendlyError = getFriendlyErrorMessage(result);
           setError(friendlyError.message);

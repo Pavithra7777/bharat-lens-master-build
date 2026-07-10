@@ -45,6 +45,7 @@ export interface AppState {
   language: Language;
   
   // Actions
+  setUser: (user: { id: string; email?: string } | null) => void;
   setProfile: (profile: Profile | null) => void;
   setSimpleMode: (enabled: boolean) => void;
   setLanguage: (lang: Language) => void;
@@ -56,7 +57,7 @@ export interface AppState {
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [user, setUserState] = useState<{ id: string; email?: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
@@ -73,7 +74,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const { user: currentUser } = await db.auth.getUser();
       if (currentUser) {
-        setUser(currentUser);
+        setUserState(currentUser);
         await loadOrCreateProfile(currentUser.id);
       }
     } catch (error) {
@@ -139,6 +140,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function setUser(userData: { id: string; email?: string } | null) {
+    setUserState(userData);
+    if (userData) {
+      loadOrCreateProfile(userData.id);
+    } else {
+      setProfile(null);
+      setFamilyMembers([]);
+      setActiveFamilyMemberId(null);
+    }
+  }
+
   function setProfileState(profileData: Profile | null) {
     setProfile(profileData);
     if (profileData) {
@@ -195,6 +207,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     activeFamilyMemberId,
     simpleMode,
     language,
+    setUser,
     setProfile: setProfileState,
     setSimpleMode,
     setLanguage,
