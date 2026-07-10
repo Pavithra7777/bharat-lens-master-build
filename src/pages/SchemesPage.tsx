@@ -203,9 +203,10 @@ If no specific schemes match, return an empty array [].`;
       );
       
       await loadSchemes();
-      setAddingScheme(null);
+      setAiResults(prev => prev.filter(r => r.title !== scheme.title));
     } catch (error) {
       console.error('Failed to add scheme:', error);
+    } finally {
       setAddingScheme(null);
     }
   }
@@ -213,6 +214,7 @@ If no specific schemes match, return an empty array [].`;
   function matchesCategorySingle(scheme: Scheme, categoryId: string): boolean {
     if (categoryId === 'all') return true;
     
+    // Map UI category IDs to actual database category values
     const categoryMap: Record<string, string[]> = {
       student: ['student', 'education', 'scholarship'],
       farmer: ['farmer', 'agriculture'],
@@ -225,8 +227,9 @@ If no specific schemes match, return an empty array [].`;
     };
     
     const keywords = categoryMap[categoryId] || [categoryId];
-    const searchText = `${scheme.category} ${scheme.title} ${scheme.description}`.toLowerCase();
-    return keywords.some(k => searchText.includes(k));
+    // Only match against the category field, not title/description
+    const schemeCategory = scheme.category?.toLowerCase() || '';
+    return keywords.some(k => schemeCategory === k || schemeCategory.includes(k));
   }
 
   const filteredByTab = useMemo(() => {
@@ -399,100 +402,68 @@ If no specific schemes match, return an empty array [].`;
               onClick={() => setSelectedScheme(scheme)}
               className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-left hover:shadow-md transition"
             >
-              <div className="flex items-start justify-between mb-2">
+              <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <div className="flex flex-wrap gap-1 mb-1">
-                    {scheme.tags?.slice(0, 3).map((tag) => (
-                      <span key={tag} className="text-xs px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] rounded-full">
-                        {tag}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] text-xs rounded-full capitalize">
+                      {scheme.category}
+                    </span>
+                    {scheme.benefit_amount_text && (
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
+                        {scheme.benefit_amount_text}
                       </span>
-                    ))}
-                    {scheme.professions?.slice(0, 2).map((prof) => (
-                      <span key={prof} className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
-                        {prof}
-                      </span>
-                    ))}
+                    )}
                   </div>
-                  <h3 className="font-semibold text-[#1A1A2E]">{scheme.title}</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1">{scheme.title}</h3>
+                  <p className="text-sm text-gray-500 line-clamp-2">{scheme.description}</p>
+                  {scheme.required_documents && scheme.required_documents.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Docs: {scheme.required_documents.slice(0, 3).join(', ')}
+                      {scheme.required_documents.length > 3 && ` +${scheme.required_documents.length - 3} more`}
+                    </p>
+                  )}
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400" />
+                <ChevronRight className="w-5 h-5 text-gray-400 ml-2" />
               </div>
-              <p className="text-sm text-gray-500 line-clamp-2 mb-3">{scheme.description}</p>
-              {scheme.benefit_amount_text && (
-                <div className="flex items-center gap-1 text-sm text-green-600 font-medium">
-                  <CheckCircle className="w-4 h-4" />
-                  {scheme.benefit_amount_text}
-                </div>
-              )}
             </button>
           ))
         )}
       </div>
 
-      {/* AI Search FAB */}
-      <button
-        onClick={() => setShowAiPanel(true)}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full shadow-lg flex items-center justify-center z-40 hover:scale-105 transition"
-      >
-        <Sparkles className="w-6 h-6 text-white" />
-      </button>
-
       {/* AI Search Panel */}
       {showAiPanel && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
-          <div 
-            className="bg-white rounded-t-3xl w-full max-h-[85vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-[#1A1A2E]">AI Scheme Finder</h2>
-                  <p className="text-sm text-gray-500">Describe your situation to find relevant schemes</p>
-                </div>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
+          <div className="bg-white w-full rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up">
+            <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">AI Scheme Finder</h2>
+                <button
+                  onClick={() => setShowAiPanel(false)}
+                  className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  setShowAiPanel(false);
-                  setAiResults([]);
-                  setAiSearchQuery('');
-                }}
-                className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              {/* Search Input */}
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Brain className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#1B3A6B]" />
                 <input
                   type="text"
                   value={aiSearchQuery}
                   onChange={(e) => setAiSearchQuery(e.target.value)}
-                  placeholder="E.g., I am a farmer from Maharashtra looking for schemes..."
-                  className="w-full pl-12 pr-4 py-3 bg-gray-50 rounded-xl border border-gray-200 outline-none focus:border-[#1B3A6B]"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !aiSearching) {
-                      searchSchemesWithAI(aiSearchQuery);
-                    }
-                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && searchSchemesWithAI(aiSearchQuery)}
+                  placeholder="Describe what you're looking for..."
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[#1B3A6B]/20"
                 />
               </div>
-              
               <button
                 onClick={() => searchSchemesWithAI(aiSearchQuery)}
                 disabled={aiSearching || !aiSearchQuery.trim()}
-                className="w-full py-3 bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full mt-3 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {aiSearching ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Searching...
+                    Finding schemes...
                   </>
                 ) : (
                   <>
@@ -501,266 +472,293 @@ If no specific schemes match, return an empty array [].`;
                   </>
                 )}
               </button>
-              
-              {/* AI Searching Animation - Shows while AI is thinking */}
-              {aiSearching && (
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-8 text-center border border-purple-100">
-                  <div className="relative">
-                    <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                      <Brain className="w-10 h-10 text-white" />
-                    </div>
-                    {/* Animated dots */}
-                    <div className="flex items-center justify-center gap-1 mb-4">
-                      <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                      <span className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                    </div>
-                  </div>
-                  <h3 className="font-semibold text-[#1A1A2E] mb-2">Finding the best schemes for you...</h3>
-                  <p className="text-sm text-gray-500 mb-4">Our AI is searching through government databases</p>
-                  <div className="flex items-center justify-center gap-2 text-sm text-purple-600">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Please wait...</span>
-                  </div>
+            </div>
+
+            {aiSearching && (
+              <div className="px-6 py-8 text-center">
+                <div className="w-12 h-12 bg-[#1B3A6B]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Loader2 className="w-6 h-6 text-[#1B3A6B] animate-spin" />
                 </div>
-              )}
-              
-              {/* Quick Examples - Only show when not searching and no results */}
-              {!aiSearching && aiResults.length === 0 && (
-                <div className="text-center py-4">
-                  <p className="text-gray-500 text-sm mb-3">Try these examples:</p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {[
-                      'I am a student from UP',
-                      'I am a pregnant woman',
-                      'I need housing scheme',
-                      'I am a small business owner'
-                    ].map((example) => (
-                      <button
-                        key={example}
-                        onClick={() => {
-                          setAiSearchQuery(example);
-                          searchSchemesWithAI(example);
-                        }}
-                        className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-600"
-                      >
-                        {example}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* AI Results */}
-              {aiResults.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    Found {aiResults.length} scheme(s)
-                  </div>
-                  
-                  {aiResults.map((result, idx) => (
-                    <div key={idx} className="bg-gradient-to-br from-[#1B3A6B]/5 to-[#2A4A8B]/5 rounded-xl p-4 border border-[#1B3A6B]/10">
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-semibold text-[#1A1A2E] flex-1">{result.title}</h3>
-                        <button
-                          onClick={() => addSchemeToDatabase(result)}
-                          disabled={addingScheme === result.title}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-[#1B3A6B] text-white rounded-lg text-sm font-medium hover:bg-[#2A4A8B] transition disabled:opacity-50"
-                        >
-                          {addingScheme === result.title ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Plus className="w-4 h-4" />
-                          )}
-                          Add
-                        </button>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-3">{result.description}</p>
-                      
-                      {result.eligibility.length > 0 && (
-                        <div className="mb-2">
-                          <p className="text-xs font-medium text-gray-500 mb-1">Eligibility:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {result.eligibility.slice(0, 3).map((el, i) => (
-                              <span key={i} className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
-                                {el}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {result.documents.length > 0 && (
-                        <div className="mb-2">
-                          <p className="text-xs font-medium text-gray-500 mb-1">Documents needed:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {result.documents.slice(0, 2).map((doc, i) => (
-                              <span key={i} className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                                {doc}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
+                <p className="text-gray-500">Searching official government sources...</p>
+              </div>
+            )}
+
+            {aiResults.length > 0 && (
+              <div className="px-6 py-4 space-y-4">
+                <p className="text-sm text-gray-500">{aiResults.length} schemes found</p>
+                {aiResults.map((result, idx) => (
+                  <div key={idx} className="bg-gray-50 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] text-xs rounded-full capitalize">
+                        {result.category}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold text-gray-900 mb-1">{result.title}</h3>
+                    <p className="text-sm text-gray-500 mb-3">{result.description}</p>
+                    <div className="text-xs text-gray-400 mb-3">
+                      <p className="font-medium text-gray-500 mb-1">Eligibility:</p>
+                      <ul className="list-disc list-inside">
+                        {result.eligibility.slice(0, 3).map((e, i) => (
+                          <li key={i}>{e}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="flex gap-2">
                       {result.url && (
                         <a
                           href={result.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-[#1B3A6B] hover:underline"
+                          className="flex-1 py-2 bg-[#1B3A6B] text-white text-center rounded-lg text-sm flex items-center justify-center gap-1"
                         >
-                          Visit Official Website
-                          <ExternalLink className="w-3.5 h-3.5" />
+                          Website
+                          <ExternalLink className="w-3 h-3" />
                         </a>
                       )}
+                      <button
+                        onClick={() => addSchemeToDatabase(result)}
+                        disabled={addingScheme === result.title}
+                        className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm flex items-center justify-center gap-1 disabled:opacity-50"
+                      >
+                        {addingScheme === result.title ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" />
+                            Add
+                          </>
+                        )}
+                      </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!aiSearching && aiResults.length === 0 && aiSearchQuery && (
+              <div className="px-6 py-8 text-center">
+                <p className="text-gray-500">Click search to find relevant schemes</p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Scheme Detail Modal */}
       {selectedScheme && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50" onClick={() => setSelectedScheme(null)}>
-          <div 
-            className="bg-white rounded-t-3xl w-full max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-[#1A1A2E]">Scheme Details</h2>
-              <button
-                onClick={() => setSelectedScheme(null)}
-                className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              <div>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {selectedScheme.tags?.map((tag) => (
-                    <span key={tag} className="text-sm px-3 py-1 bg-[#1B3A6B]/10 text-[#1B3A6B] rounded-full">
-                      {tag}
-                    </span>
-                  ))}
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
+          <div className="bg-white w-full rounded-t-3xl max-h-[90vh] overflow-y-auto animate-slide-up">
+            <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setSelectedScheme(null)}
+                  className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <div className="flex gap-2">
+                  {selectedScheme.official_url && (
+                    <a
+                      href={selectedScheme.official_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-10 h-10 bg-[#1B3A6B] rounded-full flex items-center justify-center"
+                    >
+                      <ExternalLink className="w-5 h-5 text-white" />
+                    </a>
+                  )}
+                  <button className="w-10 h-10 bg-[#1B3A6B] rounded-full flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-white" />
+                  </button>
                 </div>
-                <h1 className="text-2xl font-bold text-[#1A1A2E] mb-2">{selectedScheme.title}</h1>
-                <p className="text-gray-600">{selectedScheme.description}</p>
               </div>
-              
+            </div>
+
+            <div className="px-6 py-6 space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="px-3 py-1 bg-[#1B3A6B]/10 text-[#1B3A6B] text-sm rounded-full capitalize">
+                    {selectedScheme.category}
+                  </span>
+                  {selectedScheme.coverage && (
+                    <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full">
+                      {selectedScheme.coverage}
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">{selectedScheme.title}</h2>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4">
+                <p className="text-gray-700">{selectedScheme.description}</p>
+              </div>
+
               {selectedScheme.short_benefit && (
                 <div className="bg-green-50 rounded-xl p-4">
-                  <p className="text-sm font-medium text-green-800">Key Benefit</p>
-                  <p className="text-green-700">{selectedScheme.short_benefit}</p>
+                  <p className="text-green-800 font-medium">💰 {selectedScheme.short_benefit}</p>
                 </div>
               )}
-              
-              {selectedScheme.benefit_amount_text && (
-                <div className="bg-purple-50 rounded-xl p-4">
-                  <p className="text-sm font-medium text-purple-800">Benefit Amount</p>
-                  <p className="text-purple-700">{selectedScheme.benefit_amount_text}</p>
+
+              <div className="space-y-4">
+                <h3 className="font-semibold text-gray-900">Benefits</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedScheme.benefit_type && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1">Type</p>
+                      <p className="text-sm font-medium capitalize">{selectedScheme.benefit_type}</p>
+                    </div>
+                  )}
+                  {selectedScheme.benefit_amount_text && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1">Amount</p>
+                      <p className="text-sm font-medium">{selectedScheme.benefit_amount_text}</p>
+                    </div>
+                  )}
+                  {selectedScheme.benefit_amount_min && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1">Min Amount</p>
+                      <p className="text-sm font-medium">₹{selectedScheme.benefit_amount_min.toLocaleString()}</p>
+                    </div>
+                  )}
+                  {selectedScheme.benefit_amount_max && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1">Max Amount</p>
+                      <p className="text-sm font-medium">₹{selectedScheme.benefit_amount_max.toLocaleString()}</p>
+                    </div>
+                  )}
                 </div>
-              )}
-              
-              <div>
-                <h3 className="font-semibold text-[#1A1A2E] mb-3 flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-[#1B3A6B]" />
-                  Eligibility Criteria
-                </h3>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-semibold text-gray-900">Eligibility</h3>
                 <div className="space-y-2">
-                  {selectedScheme.category_eligible && selectedScheme.category_eligible.length > 0 && (
+                  {selectedScheme.gender && (
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      <span>Categories: {selectedScheme.category_eligible.join(', ')}</span>
+                      <Users className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm">Gender: <span className="font-medium capitalize">{selectedScheme.gender}</span></span>
                     </div>
                   )}
-                  {selectedScheme.professions && selectedScheme.professions.length > 0 && (
+                  {selectedScheme.min_age !== undefined && selectedScheme.max_age !== undefined && (
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      <span>Professions: {selectedScheme.professions.join(', ')}</span>
-                    </div>
-                  )}
-                  {selectedScheme.applicable_states && selectedScheme.applicable_states.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-green-500" />
-                      <span>States: {selectedScheme.applicable_states.join(', ')}</span>
+                      <Clock className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm">Age: <span className="font-medium">{selectedScheme.min_age} - {selectedScheme.max_age} years</span></span>
                     </div>
                   )}
                   {selectedScheme.income_limit && (
                     <div className="flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500" />
-                      <span>Income Limit: ₹{selectedScheme.income_limit.toLocaleString()}</span>
+                      <MapPin className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm">Income Limit: <span className="font-medium">₹{selectedScheme.income_limit.toLocaleString()}/year</span></span>
+                    </div>
+                  )}
+                  {selectedScheme.category_eligible && selectedScheme.category_eligible.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm">Categories: <span className="font-medium capitalize">{selectedScheme.category_eligible.join(', ')}</span></span>
+                    </div>
+                  )}
+                  {selectedScheme.professions && selectedScheme.professions.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm">Professions: <span className="font-medium capitalize">{selectedScheme.professions.join(', ')}</span></span>
+                    </div>
+                  )}
+                  {selectedScheme.employment_status && selectedScheme.employment_status.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm">Employment: <span className="font-medium capitalize">{selectedScheme.employment_status.join(', ')}</span></span>
+                    </div>
+                  )}
+                  {selectedScheme.domicile_required && (
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm">Domicile certificate required</span>
                     </div>
                   )}
                 </div>
               </div>
-              
-              {selectedScheme.required_documents && selectedScheme.required_documents.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-[#1A1A2E] mb-3 flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-[#1B3A6B]" />
-                    Required Documents
-                  </h3>
+
+              {selectedScheme.applicable_states && selectedScheme.applicable_states.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-900">Applicable States</h3>
                   <div className="flex flex-wrap gap-2">
-                    {selectedScheme.required_documents.map((doc, i) => (
-                      <span key={i} className="px-3 py-1.5 bg-gray-100 rounded-lg text-sm">
-                        {doc}
+                    {selectedScheme.applicable_states.map((state, idx) => (
+                      <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full">
+                        {state}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
-              
+
+              {selectedScheme.required_documents && selectedScheme.required_documents.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-900">Required Documents</h3>
+                  <ul className="space-y-2">
+                    {selectedScheme.required_documents.map((doc, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
+                        <span className="text-sm">{doc}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {selectedScheme.application_mode && selectedScheme.application_mode.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-[#1A1A2E] mb-3 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-[#1B3A6B]" />
-                    Application Mode
-                  </h3>
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-900">How to Apply</h3>
                   <div className="flex flex-wrap gap-2">
-                    {selectedScheme.application_mode.map((mode, i) => (
-                      <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm">
+                    {selectedScheme.application_mode.map((mode, idx) => (
+                      <span key={idx} className="px-3 py-1 bg-blue-50 text-blue-700 text-sm rounded-full capitalize">
                         {mode}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
-              
-              <div className="flex flex-col gap-3">
-                {selectedScheme.official_url && (
-                  <a
-                    href={selectedScheme.official_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-3 bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] text-white rounded-xl font-medium flex items-center justify-center gap-2"
-                  >
-                    <ExternalLink className="w-5 h-5" />
-                    Apply on Official Website
-                  </a>
-                )}
-                {selectedScheme.helpline && (
-                  <a
-                    href={`tel:${selectedScheme.helpline}`}
-                    className="w-full py-3 bg-gray-100 text-[#1A1A2E] rounded-xl font-medium flex items-center justify-center gap-2"
-                  >
-                    <Phone className="w-5 h-5" />
-                    Helpline: {selectedScheme.helpline}
-                  </a>
-                )}
-              </div>
-              
-              {selectedScheme.department && (
-                <div className="text-sm text-gray-500">
-                  <span className="font-medium">Department:</span> {selectedScheme.department}
-                  {selectedScheme.ministry && ` • ${selectedScheme.ministry}`}
+
+              {(selectedScheme.department || selectedScheme.ministry) && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-gray-900">Scheme Details</h3>
+                  <div className="space-y-2">
+                    {selectedScheme.department && (
+                      <div className="flex items-center gap-2">
+                        <Briefcase className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm">Department: <span className="font-medium">{selectedScheme.department}</span></span>
+                      </div>
+                    )}
+                    {selectedScheme.ministry && (
+                      <div className="flex items-center gap-2">
+                        <Home className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm">Ministry: <span className="font-medium">{selectedScheme.ministry}</span></span>
+                      </div>
+                    )}
+                    {selectedScheme.helpline && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm">Helpline: <span className="font-medium">{selectedScheme.helpline}</span></span>
+                      </div>
+                    )}
+                    {selectedScheme.source_verified_at && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm">Verified: <span className="font-medium">{new Date(selectedScheme.source_verified_at).toLocaleDateString()}</span></span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+
+              {selectedScheme.official_url && (
+                <a
+                  href={selectedScheme.official_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full py-4 bg-[#1B3A6B] text-white text-center rounded-xl font-semibold flex items-center justify-center gap-2"
+                >
+                  Apply Now
+                  <ExternalLink className="w-5 h-5" />
+                </a>
               )}
             </div>
           </div>
