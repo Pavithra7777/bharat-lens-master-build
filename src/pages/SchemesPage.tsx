@@ -172,6 +172,7 @@ If no specific schemes match, return an empty array [].`;
         }
       } catch (parseError) {
         console.error('Failed to parse AI response:', parseError);
+        setAiError('Could not understand the AI response. Please try again.');
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
