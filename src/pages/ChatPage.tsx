@@ -29,6 +29,11 @@ const LANGUAGE_NAMES: Record<string, { name: string; nativeName: string }> = {
   mr: { name: 'Marathi', nativeName: 'मराठी' },
 };
 
+// Helper to get language info safely
+function getLangInfo(lang: string) {
+  return LANGUAGE_NAMES[lang] ?? LANGUAGE_NAMES['en']!;
+}
+
 export function ChatPage() {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -80,7 +85,7 @@ export function ChatPage() {
     setGeneratingAnswer(true);
 
     try {
-      const langInfo = LANGUAGE_NAMES[language] || LANGUAGE_NAMES['en'];
+      const langInfo = getLangInfo(language);
       const userName = profile?.full_name || 'User';
       
       // Build context for AI - ask for bilingual response
@@ -214,7 +219,7 @@ Keep responses concise but informative. Use simple language accessible to all ed
     }
   }
 
-  const langInfo = LANGUAGE_NAMES[language] || LANGUAGE_NAMES['en'];
+  const langInfo = getLangInfo(language);
 
   return (
     <div className="min-h-screen bg-[#FAFBFC] flex flex-col">

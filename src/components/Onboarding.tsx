@@ -34,7 +34,7 @@ export function OnboardingPage() {
   const [language, setLanguage] = useState<Language>('en');
   const [loading, setLoading] = useState(false);
   
-  const { profile, refreshProfile } = useApp();
+  const { profile, setProfile, setLanguage: setAppLanguage } = useApp();
   const { navigate } = useRouter();
 
   async function handleComplete() {
@@ -42,6 +42,7 @@ export function OnboardingPage() {
     setLoading(true);
 
     try {
+      // Update profile with onboarding data
       await db.query(
         `UPDATE profiles SET 
           full_name = $1, 
@@ -54,11 +55,24 @@ export function OnboardingPage() {
         [name.trim(), state, occupation, language, profile.id]
       );
       
-      await refreshProfile();
-      navigate('/');
+      // Update local state
+      setProfile({
+        ...profile,
+        full_name: name.trim(),
+        state,
+        occupation_category: occupation,
+        preferred_language: language,
+        onboarding_completed: true,
+      });
+      
+      // Update app language
+      setAppLanguage(language);
+      
+      // Redirect to home immediately
+      window.location.hash = '/';
+      window.location.reload();
     } catch (error) {
       console.error('Onboarding update failed:', error);
-    } finally {
       setLoading(false);
     }
   }

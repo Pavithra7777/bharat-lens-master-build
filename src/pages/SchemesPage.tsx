@@ -51,6 +51,18 @@ interface AISchemeSearchResult {
   category: string;
 }
 
+// Comprehensive category mapping - UI filters to DB categories/keywords
+const CATEGORY_MAP: Record<string, string[]> = {
+  student: ['student', 'education', 'scholarship', 'school', 'college', 'university'],
+  farmer: ['farmer', 'agriculture', 'kisan', 'krishi', 'crop', 'land'],
+  women: ['women', 'mother', 'child', 'widow', 'pregnant', 'girl', 'beti', 'stree'],
+  housing: ['housing', 'home', 'shelter', 'gratuity', 'house', 'bhavan'],
+  health: ['health', 'medical', 'insurance', 'ayush', 'hospital', 'disease'],
+  business: ['business', 'entrepreneur', 'mudra', 'startup', 'enterprise', 'udyami'],
+  employment: ['employment', 'job', 'skill', 'training', 'work', 'rozgar', 'naukri'],
+  elderly: ['elderly', 'senior', 'pension', 'old', 'vridha', 'retired'],
+};
+
 const CATEGORIES = [
   { id: 'all', label: 'All', icon: Sparkles },
   { id: 'student', label: 'Students', icon: GraduationCap },
@@ -74,7 +86,7 @@ export function SchemesPage() {
   const [addingScheme, setAddingScheme] = useState<string | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['all']);
   const [selectedScheme, setSelectedScheme] = useState<Scheme | null>(null);
-  const [tab, setTab] = useState<'for-you' | 'all'>('for-you');
+  const [tab, setTab] = useState<'for-you' | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const { profile } = useApp();
 
@@ -123,7 +135,7 @@ Return ONLY a valid JSON array with no other text. Up to 5 schemes with this exa
   "documents": ["required document 1", "required document 2"],
   "url": "official website URL",
   "department": "Department name",
-  "category": "primary category (farmer, student, women, housing, health, business, elderly, sc_st, minority, disability, employment)"
+  "category": "primary category (farmer, student, women, housing, health, business, employment, elderly)"
 }]
 
 Only include schemes that are:
@@ -211,27 +223,22 @@ If no specific schemes match, return an empty array [].`;
     }
   }
 
+  // Enhanced category matching - check if ANY keyword from category matches the scheme
   function matchesCategorySingle(scheme: Scheme | AISchemeSearchResult, categoryId: string): boolean {
     if (categoryId === 'all') return true;
     
-    // Map UI category IDs to actual database category values
-    const categoryMap: Record<string, string[]> = {
-      student: ['student', 'education', 'scholarship'],
-      farmer: ['farmer', 'agriculture'],
-      women: ['women', 'mother', 'child', 'widow', 'pregnant', 'girl', 'beti'],
-      housing: ['housing', 'home', 'shelter', 'gratuity'],
-      health: ['health', 'medical', 'insurance', 'ayush'],
-      business: ['business', 'entrepreneur', 'mudra', 'startup'],
-      employment: ['employment', 'job', 'skill', 'training'],
-      elderly: ['elderly', 'senior', 'pension'],
-    };
+    // Get the keywords for this category
+    const keywords = CATEGORY_MAP[categoryId] || [categoryId];
     
-    const keywords = categoryMap[categoryId] || [categoryId];
+    // Build scheme text from category, professions, and title/description
     const schemeCategory = (scheme as Scheme).category?.toLowerCase() || (scheme as AISchemeSearchResult).category?.toLowerCase() || '';
     const schemeProfessions = ((scheme as Scheme).professions || []).map((p: string) => p.toLowerCase());
-    const schemeText = [schemeCategory, ...schemeProfessions].join(' ');
-    // Check if any keyword matches the scheme's category or professions
-    return keywords.some(k => schemeText === k || schemeText.includes(k));
+    const schemeTitle = (scheme as Scheme).title?.toLowerCase() || (scheme as AISchemeSearchResult).title?.toLowerCase() || '';
+    const schemeDesc = (scheme as AISchemeSearchResult).description?.toLowerCase() || '';
+    const schemeText = [schemeCategory, ...schemeProfessions, schemeTitle, schemeDesc].join(' ');
+    
+    // Check if ANY keyword appears in the scheme text (partial match)
+    return keywords.some(k => schemeText.includes(k));
   }
 
   const filteredByTab = useMemo(() => {
@@ -239,7 +246,6 @@ If no specific schemes match, return an empty array [].`;
       const profileKeywords: string[] = [];
       if (profile.occupation_category) profileKeywords.push(profile.occupation_category.toLowerCase());
       if (profile.state) profileKeywords.push(profile.state.toLowerCase());
-      if (profile.category_eligible) profileKeywords.push(...profile.category_eligible.map(c => c.toLowerCase()));
       
       return schemes.filter(scheme => {
         const schemeText = `${scheme.category} ${scheme.title} ${scheme.professions?.join(' ') || ''} ${scheme.category_eligible?.join(' ') || ''} ${scheme.applicable_states?.join(' ') || ''}`.toLowerCase();
@@ -268,28 +274,171 @@ If no specific schemes match, return an empty array [].`;
     return filtered;
   }, [filteredByTab, search, selectedCategories]);
 
+  // Fixed category counts - count schemes matching each category
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: schemes.length };
+    
     CATEGORIES.forEach(cat => {
       if (cat.id !== 'all') {
-        // Direct category match - check if scheme category equals the category id
-        const directMatch = schemes.filter(s =>
-          s.category?.toLowerCase() === cat.id
-        ).length;
-        
-        // Keyword-based match from the category map
-        const keywordMatch = schemes.filter(s =>
-          matchesCategorySingle(s, cat.id)
-        ).length;
-        
-        // Use whichever is greater (more inclusive)
-        counts[cat.id] = Math.max(directMatch, keywordMatch);
+        // Count all schemes that match this category filter
+        counts[cat.id] = schemes.filter(s => matchesCategorySingle(s, cat.id)).length;
       }
     });
+    
     return counts;
-  }, [schemes, selectedCategories]);
+  }, [schemes, CATEGORIES]);
 
   return (
+    <div className="min-h-screen bg-[#FAFBFC]">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-6 pt-12 pb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-xl font-bold text-white">Government Schemes</h1>
+            <p className="text-white/70 text-sm">{schemes.length}+ schemes for citizens</p>
+          </div>
+          <button
+            onClick={() => setShowAiPanel(true)}
+            className="px-4 py-2 bg-white/20 rounded-full text-white text-sm font-medium flex items-center gap-2 hover:bg-white/30 transition"
+          >
+            <Brain className="w-4 h-4" />
+            AI Finder
+          </button>
+        </div>
+        
+        {/* Tabs */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setTab('all')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+              tab === 'all'
+                ? 'bg-white text-[#1B3A6B]'
+                : 'bg-white/20 text-white'
+            }`}
+          >
+            All Schemes
+          </button>
+          <button
+            onClick={() => setTab('for-you')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+              tab === 'for-you'
+                ? 'bg-white text-[#1B3A6B]'
+                : 'bg-white/20 text-white'
+            }`}
+          >
+            For You
+          </button>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="px-6 py-4 bg-white border-b border-gray-100">
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search schemes..."
+              className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-[#1B3A6B]/20"
+            />
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`w-12 h-12 rounded-xl flex items-center justify-center transition ${
+              showFilters ? 'bg-[#1B3A6B] text-white' : 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            <SlidersHorizontal className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Category Filters */}
+      {showFilters && (
+        <div className="px-6 py-4 bg-white border-b border-gray-100">
+          <div className="flex flex-wrap gap-2">
+            {CATEGORIES.map((cat) => {
+              const Icon = cat.icon;
+              const count = categoryCounts[cat.id] || 0;
+              const isSelected = selectedCategories.includes(cat.id);
+              
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    if (cat.id === 'all') {
+                      setSelectedCategories(['all']);
+                    } else {
+                      const newCats = selectedCategories.filter(c => c !== 'all');
+                      if (newCats.includes(cat.id)) {
+                        setSelectedCategories(newCats.filter(c => c !== cat.id));
+                      } else {
+                        setSelectedCategories([...newCats, cat.id]);
+                      }
+                      if (newCats.length === 0 && cat.id !== 'all') {
+                        setSelectedCategories([cat.id]);
+                      }
+                    }
+                  }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition ${
+                    isSelected
+                      ? 'bg-[#1B3A6B] text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {cat.label}
+                  <span className={`text-xs ${isSelected ? 'text-white/70' : 'text-gray-400'}`}>
+                    ({count})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Category Pills (collapsed view) */}
+      {!showFilters && (
+        <div className="px-6 py-3 bg-white border-b border-gray-100 overflow-x-auto">
+          <div className="flex gap-2 min-w-max">
+            {CATEGORIES.map((cat) => {
+              const count = categoryCounts[cat.id] || 0;
+              const isSelected = selectedCategories.includes(cat.id);
+              
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    if (cat.id === 'all') {
+                      setSelectedCategories(['all']);
+                    } else {
+                      const newCats = selectedCategories.filter(c => c !== 'all');
+                      if (newCats.includes(cat.id)) {
+                        setSelectedCategories(newCats.filter(c => c !== cat.id));
+                      } else {
+                        setSelectedCategories([...newCats, cat.id]);
+                      }
+                      if (newCats.length === 0 && cat.id !== 'all') {
+                        setSelectedCategories([cat.id]);
+                      }
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-[#1B3A6B] text-white'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {cat.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Scheme Count */}
       <div className="px-6 py-3 bg-white">

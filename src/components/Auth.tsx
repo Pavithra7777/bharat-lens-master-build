@@ -150,9 +150,9 @@ export function AuthPage() {
     try {
       if (isLogin) {
         const result = await db.auth.login({ email, password });
-        if (result.ok) {
+        if (result.ok && result.user) {
           // Set user in context
-          setUser({ id: result.userId || email, email });
+          setUser({ id: result.user.id, email: result.user.email });
           // Show success and trigger redirect
           setLoginSuccess(true);
         } else {
@@ -162,9 +162,9 @@ export function AuthPage() {
         }
       } else {
         const result = await db.auth.signup({ email, password, name });
-        if (result.ok) {
-          // Set user in context
-          setUser({ id: result.userId || email, email, name });
+        if (result.ok && result.user) {
+          // Set user in context (only id and email are valid)
+          setUser({ id: result.user.id, email: result.user.email });
           // Redirect to onboarding for new users
           setLoginSuccess(true);
           setTimeout(() => navigate('/onboarding'), 300);
