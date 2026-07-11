@@ -337,8 +337,8 @@ Keep responses concise but informative. Use simple language accessible to all ed
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[#1B3A6B]">{langInfo.nativeName === 'English' ? 'Generating answer...' : 'जवाब बना रहा हूं...'}</p>
-                  <p className="text-xs text-gray-400">{langInfo.nativeName === 'English' ? 'Please wait' : 'कृपया प्रतीक्षा करें'}</p>
+                  <p className="text-sm font-medium text-[#1B3A6B]">{langInfo.nativeName === 'English' ? 'Generating answer' : 'जवाब बना रहा हूं'}<span className="inline-flex ml-0.5"><span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'0ms'}} /><span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce ml-0.5" style={{animationDelay:'200ms'}} /><span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce ml-0.5" style={{animationDelay:'400ms'}} /></span></p>
+                  <p className="text-xs text-gray-400">{langInfo.nativeName === 'English' ? 'Please wait — reading government sources...' : 'कृपया प्रतीक्षा करें — सरकारी स्रोत पढ़ रहा हूं...'}</p>
                 </div>
               </div>
             </div>

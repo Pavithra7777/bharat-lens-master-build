@@ -211,25 +211,27 @@ If no specific schemes match, return an empty array [].`;
     }
   }
 
-  function matchesCategorySingle(scheme: Scheme, categoryId: string): boolean {
+  function matchesCategorySingle(scheme: Scheme | AISchemeSearchResult, categoryId: string): boolean {
     if (categoryId === 'all') return true;
     
     // Map UI category IDs to actual database category values
     const categoryMap: Record<string, string[]> = {
       student: ['student', 'education', 'scholarship'],
       farmer: ['farmer', 'agriculture'],
-      women: ['women', 'mother', 'child'],
-      housing: ['housing', 'home', 'shelter'],
-      health: ['health', 'medical', 'insurance'],
+      women: ['women', 'mother', 'child', 'widow', 'pregnant', 'girl', 'beti'],
+      housing: ['housing', 'home', 'shelter', 'gratuity'],
+      health: ['health', 'medical', 'insurance', 'ayush'],
       business: ['business', 'entrepreneur', 'mudra', 'startup'],
-      employment: ['employment', 'job', 'skill'],
+      employment: ['employment', 'job', 'skill', 'training'],
       elderly: ['elderly', 'senior', 'pension'],
     };
     
     const keywords = categoryMap[categoryId] || [categoryId];
-    // Only match against the category field, not title/description
-    const schemeCategory = scheme.category?.toLowerCase() || '';
-    return keywords.some(k => schemeCategory === k || schemeCategory.includes(k));
+    const schemeCategory = (scheme as Scheme).category?.toLowerCase() || (scheme as AISchemeSearchResult).category?.toLowerCase() || '';
+    const schemeProfessions = ((scheme as Scheme).professions || []).map((p: string) => p.toLowerCase());
+    const schemeText = [schemeCategory, ...schemeProfessions].join(' ');
+    // Check if any keyword matches the scheme's category or professions
+    return keywords.some(k => schemeText === k || schemeText.includes(k));
   }
 
   const filteredByTab = useMemo(() => {
@@ -267,111 +269,27 @@ If no specific schemes match, return an empty array [].`;
   }, [filteredByTab, search, selectedCategories]);
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: displayedSchemes.length };
+    const counts: Record<string, number> = { all: schemes.length };
     CATEGORIES.forEach(cat => {
       if (cat.id !== 'all') {
-        counts[cat.id] = schemes.filter(s => matchesCategorySingle(s, cat.id)).length;
+        // Direct category match - check if scheme category equals the category id
+        const directMatch = schemes.filter(s =>
+          s.category?.toLowerCase() === cat.id
+        ).length;
+        
+        // Keyword-based match from the category map
+        const keywordMatch = schemes.filter(s =>
+          matchesCategorySingle(s, cat.id)
+        ).length;
+        
+        // Use whichever is greater (more inclusive)
+        counts[cat.id] = Math.max(directMatch, keywordMatch);
       }
     });
     return counts;
-  }, [schemes, displayedSchemes]);
+  }, [schemes, selectedCategories]);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-6 py-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Schemes</h1>
-            <p className="text-white/70 text-sm">Government benefits for you</p>
-          </div>
-          <button
-            onClick={() => setShowAiPanel(true)}
-            className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm hover:bg-white/30 transition"
-          >
-            <Sparkles className="w-6 h-6 text-white" />
-          </button>
-        </div>
-        
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search schemes..."
-            className="w-full pl-12 pr-4 py-3 bg-white rounded-xl outline-none"
-          />
-        </div>
-      </div>
-
-      {/* Tab Switcher */}
-      <div className="px-6 py-3 bg-white border-b border-gray-100">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setTab('for-you')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              tab === 'for-you' 
-                ? 'bg-[#1B3A6B] text-white' 
-                : 'text-gray-500 hover:bg-gray-100'
-            }`}
-          >
-            For You
-          </button>
-          <button
-            onClick={() => setTab('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-              tab === 'all' 
-                ? 'bg-[#1B3A6B] text-white' 
-                : 'text-gray-500 hover:bg-gray-100'
-            }`}
-          >
-            All Schemes
-          </button>
-        </div>
-      </div>
-
-      {/* Category Pills */}
-      <div className="px-6 py-3 bg-white border-b border-gray-100 overflow-x-auto">
-        <div className="flex gap-2">
-          {CATEGORIES.map((cat) => {
-            const Icon = cat.icon;
-            const count = categoryCounts[cat.id] || 0;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => {
-                  if (cat.id === 'all') {
-                    setSelectedCategories(['all']);
-                  } else {
-                    const newCats = selectedCategories.filter(c => c !== 'all');
-                    if (newCats.includes(cat.id)) {
-                      setSelectedCategories(newCats.filter(c => c !== cat.id));
-                      if (newCats.filter(c => c !== cat.id).length === 0) {
-                        setSelectedCategories(['all']);
-                      }
-                    } else {
-                      setSelectedCategories([...newCats, cat.id]);
-                    }
-                  }
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition ${
-                  selectedCategories.includes(cat.id)
-                    ? 'bg-[#1B3A6B] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {cat.label}
-                <span className={`text-xs ${selectedCategories.includes(cat.id) ? 'text-white/70' : 'text-gray-400'}`}>
-                  ({count})
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Scheme Count */}
       <div className="px-6 py-3 bg-white">
@@ -479,7 +397,13 @@ If no specific schemes match, return an empty array [].`;
                 <div className="w-12 h-12 bg-[#1B3A6B]/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Loader2 className="w-6 h-6 text-[#1B3A6B] animate-spin" />
                 </div>
-                <p className="text-gray-500">Searching official government sources...</p>
+                <p className="text-gray-700 font-medium mb-1">Searching official government sources</p>
+                <div className="flex items-center justify-center gap-1 mt-2">
+                  <span className="w-2 h-2 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
+                  <span className="w-2 h-2 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
+                  <span className="w-2 h-2 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
+                </div>
+                <p className="text-xs text-gray-400 mt-3">This may take up to 2-3 minutes</p>
               </div>
             )}
 
