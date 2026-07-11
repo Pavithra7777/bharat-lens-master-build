@@ -81,6 +81,7 @@ export function SchemesPage() {
   const [search, setSearch] = useState('');
   const [aiSearchQuery, setAiSearchQuery] = useState('');
   const [aiSearching, setAiSearching] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [aiResults, setAiResults] = useState<AISchemeSearchResult[]>([]);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [addingScheme, setAddingScheme] = useState<string | null>(null);
@@ -114,6 +115,7 @@ export function SchemesPage() {
     if (!query.trim()) return;
     
     setAiSearching(true);
+    setAiError(null);
     setAiResults([]);
     
     try {
@@ -171,8 +173,10 @@ If no specific schemes match, return an empty array [].`;
       } catch (parseError) {
         console.error('Failed to parse AI response:', parseError);
       }
-    } catch (error) {
-      console.error('AI search failed:', error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+      console.error('AI search failed:', errorMessage);
+      setAiError(errorMessage);
     } finally {
       setAiSearching(false);
     }
@@ -553,6 +557,22 @@ If no specific schemes match, return an empty array [].`;
                   <span className="w-2 h-2 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
                 </div>
                 <p className="text-xs text-gray-400 mt-3">This may take up to 2-3 minutes</p>
+              </div>
+            )}
+
+            {!aiSearching && aiError && (
+              <div className="px-6 py-6 text-center">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Shield className="w-6 h-6 text-red-600" />
+                </div>
+                <p className="text-red-600 font-medium mb-1">Something went wrong</p>
+                <p className="text-sm text-gray-500 mb-4">{aiError}</p>
+                <button
+                  onClick={() => searchSchemesWithAI(aiSearchQuery)}
+                  className="px-6 py-2 bg-[#1B3A6B] text-white rounded-lg text-sm font-medium"
+                >
+                  Try Again
+                </button>
               </div>
             )}
 
