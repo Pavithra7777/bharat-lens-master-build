@@ -3,7 +3,7 @@ import { ai } from '@doable/ai';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { useRouter } from '../lib/Router';
-import { t } from '../lib/i18n';
+import { t, LANGUAGES } from '../lib/i18n';
 import { Send, Mic, Plus, MessageCircle, Trash2, Loader2 } from 'lucide-react';
 
 interface Message {
@@ -19,6 +19,16 @@ interface ChatSession {
   created_at: string;
 }
 
+// Language codes for AI system prompt
+const LANGUAGE_NAMES: Record<string, { name: string; nativeName: string }> = {
+  en: { name: 'English', nativeName: 'English' },
+  hi: { name: 'Hindi', nativeName: 'हिंदी' },
+  ta: { name: 'Tamil', nativeName: 'தமிழ்' },
+  te: { name: 'Telugu', nativeName: 'తెలుగు' },
+  bn: { name: 'Bengali', nativeName: 'বাংলা' },
+  mr: { name: 'Marathi', nativeName: 'मराठी' },
+};
+
 export function ChatPage() {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -28,7 +38,7 @@ export function ChatPage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { language } = useApp();
+  const { language, profile } = useApp();
   const { navigate } = useRouter();
 
   useEffect(() => {
@@ -70,12 +80,29 @@ export function ChatPage() {
     setGeneratingAnswer(true);
 
     try {
-      // Build context for AI
+      const langInfo = LANGUAGE_NAMES[language] || LANGUAGE_NAMES['en'];
+      const userName = profile?.full_name || 'User';
+      
+      // Build context for AI - ask for bilingual response
       const systemPrompt = `You are Bharat Lens AI, a helpful assistant for Indian government services.
+
+CRITICAL INSTRUCTION - BILINGUAL RESPONSE:
+The user has selected "${langInfo.nativeName}" (${langInfo.name}) as their preferred language.
+You MUST respond in the following format:
+1. FIRST, write your entire response in "${langInfo.nativeName}" (the user's preferred language)
+2. THEN, write "━━━ English Version ━━━" as a separator
+3. AFTER the separator, write the SAME response again in English
+
+Example format:
+"नमस्ते! मैं आपकी कैसे सहायता कर सकता हूं। यह भारत लेंस AI है।
+━━━ English Version ━━━
+Hello! How can I help you. This is Bharat Lens AI."
+
+Keep both versions complete and equivalent. Do not skip the English version.
+
 Answer in a friendly, clear manner. Help citizens understand government schemes, documents, and processes.
 Always suggest verifying information from official government sources when appropriate.
-Keep responses concise but informative. Use simple language accessible to all education levels.
-Current language preference: ${language}`;
+Keep responses concise but informative. Use simple language accessible to all education levels.`;
 
       let reply = '';
       
@@ -89,7 +116,11 @@ Current language preference: ${language}`;
         }
       } catch (aiError) {
         // Fallback response if AI fails
-        reply = `I understand you're asking about: "${userMessage}". As Bharat Lens, I can help you with:\n\n• Finding government schemes you qualify for\n• Understanding documents like Aadhaar, PAN, etc.\n• Guidance on application processes\n• Checking for scams\n\nFor specific scheme information, try using the Schemes tab to browse verified government programs.`;
+        const fallbackHi = `नमस्ते ${userName}! मैं भारत लेंस AI हूं। मैं आपकी कैसे सहायता कर सकता हूं?\n\nसरकारी योजनाओं, दस्तावेज़ों और आवेदन प्रक्रियाओं के बारे में जानकारी के लिए मुझसे पूछें।\n\n━━━ English Version ━━━\nHello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.`;
+        
+        const fallbackEn = `Hello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.\n\n━━━ English Version ━━━\nनमस्ते ${userName}! मैं भारत लेंस AI हूं। मैं आपकी कैसे सहायता कर सकता हूं?\n\nसरकारी योजनाओं, दस्तावेज़ों और आवेदन प्रक्रियाओं के बारे में जानकारी के लिए मुझसे पूछें।`;
+        
+        reply = language === 'en' ? fallbackEn : fallbackHi;
       }
 
       const assistantMsg: Message = {
@@ -101,10 +132,11 @@ Current language preference: ${language}`;
       setMessages(prev => [...prev, assistantMsg]);
     } catch (error) {
       console.error('Chat error:', error);
+      const errorHi = `कुछ गलत हो गया। कृपया पुनः प्रयास करें।\n━━━ English Version ━━━\nSomething went wrong. Please try again.`;
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: language === 'en' ? 'Something went wrong. Please try again.' : errorHi,
         created_at: new Date().toISOString(),
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -182,6 +214,8 @@ Current language preference: ${language}`;
     }
   }
 
+  const langInfo = LANGUAGE_NAMES[language] || LANGUAGE_NAMES['en'];
+
   return (
     <div className="min-h-screen bg-[#FAFBFC] flex flex-col">
       {/* Header */}
@@ -192,7 +226,9 @@ Current language preference: ${language}`;
               <MessageCircle className="w-6 h-6" />
               Bharat Lens AI
             </h1>
-            <p className="text-white/70 text-sm">Ask about government services in any language</p>
+            <p className="text-white/70 text-sm">
+              Ask in {langInfo.nativeName} or any language • Replying in {langInfo.nativeName} + English
+            </p>
           </div>
           <button
             onClick={startNewChat}
@@ -215,15 +251,43 @@ Current language preference: ${language}`;
               Ask me about government schemes, document requirements, application processes, or anything else!
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {['Find schemes for farmers', 'What documents for passport?', 'Check a suspicious message', 'Explain my Aadhaar'].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  onClick={() => setMessage(suggestion)}
-                  className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700 hover:bg-gray-200 transition"
-                >
-                  {suggestion}
-                </button>
-              ))}
+              {language === 'hi' ? (
+                <>
+                  {['किसानों के लिए योजनाएं', 'पासपोर्ट के लिए दस्तावेज़', 'संदिग्ध संदेश जांचें'].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => setMessage(suggestion)}
+                      className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700 hover:bg-gray-200 transition"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </>
+              ) : language === 'ta' ? (
+                <>
+                  {['விவசாயிகளுக்கான திட்டங்கள்', 'பாஸ்போர்ட்டுக்கான ஆவணங்கள்', 'சந்தேகத்திற்குரிய செய்தியை சரிபார்க்கவும்'].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => setMessage(suggestion)}
+                      className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700 hover:bg-gray-200 transition"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {['Find schemes for farmers', 'What documents for passport?', 'Check a suspicious message'].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => setMessage(suggestion)}
+                      className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700 hover:bg-gray-200 transition"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -240,6 +304,13 @@ Current language preference: ${language}`;
                   : 'bg-white border border-gray-100 rounded-bl-md shadow-sm'
               }`}
             >
+              {msg.role === 'assistant' && (
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] rounded-full">
+                    {langInfo.nativeName} + English
+                  </span>
+                </div>
+              )}
               <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
               {msg.role === 'assistant' && (
                 <button
@@ -266,8 +337,8 @@ Current language preference: ${language}`;
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[#1B3A6B]">Generating answer...</p>
-                  <p className="text-xs text-gray-400">Please wait a moment</p>
+                  <p className="text-sm font-medium text-[#1B3A6B]">{langInfo.nativeName === 'English' ? 'Generating answer...' : 'जवाब बना रहा हूं...'}</p>
+                  <p className="text-xs text-gray-400">{langInfo.nativeName === 'English' ? 'Please wait' : 'कृपया प्रतीक्षा करें'}</p>
                 </div>
               </div>
             </div>
@@ -285,7 +356,9 @@ Current language preference: ${language}`;
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about government schemes..."
+              placeholder={language === 'hi' ? 'सरकारी योजनाओं के बारे में पूछें...' : 
+                           language === 'ta' ? 'அரசு திட்டங்களைப் பற்றி கேளுங்கள்...' :
+                           'Ask about government schemes...'}
               className="w-full px-4 py-3 bg-gray-100 rounded-xl resize-none outline-none focus:ring-2 focus:ring-[#1B3A6B] transition"
               rows={1}
               style={{ maxHeight: '120px' }}
@@ -319,7 +392,9 @@ Current language preference: ${language}`;
         </div>
         
         <p className="text-xs text-gray-400 mt-2 text-center">
-          AI responses are for guidance only. Always verify with official sources.
+          {language === 'hi' ? 'AI उत्तर केवल मार्गदर्शन के लिए हैं। हमेशा आधिकारिक स्रोतों से सत्यापित करें।' :
+           language === 'ta' ? 'AI பதில்கள் வழிகாட்டுதல்களுக்காக மட்டும் உள்ளன. எப்போதும் அதிகாரப்பூர்வ மூலங்களைச் சரிபார்க்கவும்.' :
+           'AI responses are for guidance only. Always verify with official sources.'}
         </p>
       </div>
     </div>

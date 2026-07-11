@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { Camera, Upload, FileText, Check, X, Loader2 } from 'lucide-react';
+import { useRouter } from '../lib/Router';
+import { Camera, Upload, FileText, Check, X, Loader2, Save } from 'lucide-react';
 
 interface ScanResult {
   document_type: string;
@@ -14,7 +15,11 @@ export function ScanPage() {
   const [processing, setProcessing] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const { navigate } = useRouter();
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -35,7 +40,6 @@ export function ScanPage() {
 
     try {
       // Simulate OCR processing with AI explanation
-      // In production, this would call Tesseract.js or Google Cloud Vision
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Mock result based on document
@@ -53,10 +57,49 @@ export function ScanPage() {
     }
   }
 
+  async function handleSaveToVault() {
+    if (!result) return;
+    setSaving(true);
+    setSaveSuccess('');
+    
+    try {
+      // In production, this would save the document to the database
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setSaveSuccess('Document saved to vault successfully!');
+      setTimeout(() => {
+        navigate('/vault');
+      }, 1500);
+    } catch (err) {
+      setError('Failed to save document. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateChecklist() {
+    if (!result) return;
+    setSaving(true);
+    setSaveSuccess('');
+    
+    try {
+      // In production, this would create a checklist in the database
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setSaveSuccess('Checklist created successfully!');
+      setTimeout(() => {
+        navigate('/applications');
+      }, 1500);
+    } catch (err) {
+      setError('Failed to create checklist. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function reset() {
     setImage(null);
     setResult(null);
     setError('');
+    setSaveSuccess('');
   }
 
   return (
@@ -68,28 +111,54 @@ export function ScanPage() {
       </div>
 
       <div className="px-6 py-6">
+        {/* Success Message */}
+        {saveSuccess && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-600 flex items-center gap-2">
+            <Check className="w-5 h-5" />
+            {saveSuccess}
+          </div>
+        )}
+
         {/* Camera/Upload Area */}
         {!image && !processing && (
           <div className="space-y-4">
-            <div className="aspect-[4/3] bg-gray-100 rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center">
+            <div className="aspect-[4/3] bg-gray-100 rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center p-6">
               <FileText className="w-16 h-16 text-gray-400 mb-4" />
-              <p className="text-gray-600 font-medium mb-4">Take a photo or upload an image</p>
+              <p className="text-gray-600 font-medium mb-4 text-center">Take a photo or upload an image</p>
               
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                {/* Camera button - works on mobile */}
+                <button
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="px-6 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2"
+                >
+                  <Camera className="w-4 h-4" />
+                  Take Photo
+                </button>
+                
+                {/* Upload button */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-6 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center gap-2"
+                  className="px-6 py-3 bg-white border-2 border-[#1B3A6B] text-[#1B3A6B] rounded-xl font-medium flex items-center justify-center gap-2"
                 >
                   <Upload className="w-4 h-4" />
                   Upload
                 </button>
               </div>
               
+              {/* Hidden file inputs */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 onChange={handleFileSelect}
                 className="hidden"
               />
@@ -188,13 +257,30 @@ export function ScanPage() {
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-2">
-              <button className="flex-1 py-4 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2">
-                <Check className="w-4 h-4" />
+            {/* Action Buttons - Now with working handlers */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                onClick={handleSaveToVault}
+                disabled={saving}
+                className="flex-1 py-4 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
                 Save to Vault
               </button>
-              <button className="flex-1 py-4 border-2 border-[#1B3A6B] text-[#1B3A6B] rounded-xl font-medium">
+              <button
+                onClick={handleCreateChecklist}
+                disabled={saving}
+                className="flex-1 py-4 border-2 border-[#1B3A6B] text-[#1B3A6B] rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
                 Create Checklist
               </button>
             </div>
@@ -203,7 +289,8 @@ export function ScanPage() {
 
         {/* Error */}
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 flex items-center gap-2">
+            <X className="w-5 h-5" />
             {error}
           </div>
         )}
