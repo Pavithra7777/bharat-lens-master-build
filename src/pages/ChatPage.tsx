@@ -3,7 +3,7 @@ import { ai } from '@doable/ai';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { useRouter } from '../lib/Router';
-import { t, LANGUAGES } from '../lib/i18n';
+import { t, LANGUAGES, type Language } from '../lib/i18n';
 import { Send, Mic, Plus, MessageCircle, Trash2, Loader2 } from 'lucide-react';
 
 interface Message {
@@ -120,12 +120,36 @@ Keep responses concise but informative. Use simple language accessible to all ed
           reply += token;
         }
       } catch (aiError) {
-        // Fallback response if AI fails
-        const fallbackHi = `नमस्ते ${userName}! मैं भारत लेंस AI हूं। मैं आपकी कैसे सहायता कर सकता हूं?\n\nसरकारी योजनाओं, दस्तावेज़ों और आवेदन प्रक्रियाओं के बारे में जानकारी के लिए मुझसे पूछें।\n\n━━━ English Version ━━━\nHello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.`;
+        // Fallback response if AI fails - use the selected language
+        const fallbackMessages: Record<Language, { main: string; english: string }> = {
+          en: { 
+            main: `Hello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.`, 
+            english: '' 
+          },
+          hi: { 
+            main: `नमस्ते ${userName}! मैं भारत लेंस AI हूं। मैं आपकी कैसे सहायता कर सकता हूं?\n\nसरकारी योजनाओं, दस्तावेज़ों और आवेदन प्रक्रियाओं के बारे में जानकारी के लिए मुझसे पूछें।`, 
+            english: `━━━ English Version ━━━\nHello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.` 
+          },
+          ta: { 
+            main: `வணக்கம் ${userName}! நான் பாரத லென்ஸ் AI ஆவேன். நான் உங்களுக்கு எப்படி உதவ முடியும்?\n\nஅரசு திட்டங்கள், ஆவணங்கள் மற்றும் விண்ணப்ப நடைமுறைகள் பற்றி என்னிடம் கேளுங்கள்.`, 
+            english: `━━━ English Version ━━━\nHello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.` 
+          },
+          te: { 
+            main: `నమస్కారం ${userName}! నేను భారత్ లెన్స్ AIని. నేను మీకు ఎలా సహాయపడగలను?\n\nప్రభుత్వ పథకాలు, పత్రాలు మరియు అప్లికేషన్ ప్రక్రియల గురించి నన్ను అడగండి.`, 
+            english: `━━━ English Version ━━━\nHello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.` 
+          },
+          bn: { 
+            main: `নমস্কার ${userName}! আমি ভারত লেন্স AI। আমি কীভাবে আপনাকে সাহায্য করতে পারি?\n\nসরকারি প্রকল্প, নথি এবং আবেদন প্রক্রিয়া সম্পর্কে আমাকে জিজ্ঞাসা করুন।`, 
+            english: `━━━ English Version ━━━\nHello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.` 
+          },
+          mr: { 
+            main: `नमस्कार ${userName}! मी भारत लेन्स AI आहे. मी आपली कशी मदत करू शकतो?\n\nसरकारी योजना, दस्तऐवज आणि अर्ज प्रक्रिया सर्वंच माहिती विचारा.`, 
+            english: `━━━ English Version ━━━\nHello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.` 
+          },
+        };
         
-        const fallbackEn = `Hello ${userName}! I am Bharat Lens AI. How can I help you?\n\nAsk me about government schemes, documents, and application processes.\n\n━━━ English Version ━━━\nनमस्ते ${userName}! मैं भारत लेंस AI हूं। मैं आपकी कैसे सहायता कर सकता हूं?\n\nसरकारी योजनाओं, दस्तावेज़ों और आवेदन प्रक्रियाओं के बारे में जानकारी के लिए मुझसे पूछें।`;
-        
-        reply = language === 'en' ? fallbackEn : fallbackHi;
+        const fallback = fallbackMessages[language as Language] || fallbackMessages['en']!;
+        reply = fallback.main + (fallback.english ? '\n' + fallback.english : '');
       }
 
       const assistantMsg: Message = {
@@ -137,11 +161,18 @@ Keep responses concise but informative. Use simple language accessible to all ed
       setMessages(prev => [...prev, assistantMsg]);
     } catch (error) {
       console.error('Chat error:', error);
-      const errorHi = `कुछ गलत हो गया। कृपया पुनः प्रयास करें।\n━━━ English Version ━━━\nSomething went wrong. Please try again.`;
+      const errorMessages: Record<Language, string> = {
+        en: 'Something went wrong. Please try again.',
+        hi: 'कुछ गलत हो गया। कृपया पुनः प्रयास करें।\n━━━ English Version ━━━\nSomething went wrong. Please try again.',
+        ta: 'ஏதோ தவறு ஏற்பட்டது. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.\n━━━ English Version ━━━\nSomething went wrong. Please try again.',
+        te: 'ఏదో తప్పు జరిగింది.దయచేసి మళ్ళీ ప్రయత్నించండి.\n━━━ English Version ━━━\nSomething went wrong. Please try again.',
+        bn: 'কিছু ভুল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।\n━━━ English Version ━━━\nSomething went wrong. Please try again.',
+        mr: 'काहीतरी चूक झाली। कृपया पुन्हा प्रयत्न करा.\n━━━ English Version ━━━\nSomething went wrong. Please try again.',
+      };
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: language === 'en' ? 'Something went wrong. Please try again.' : errorHi,
+        content: errorMessages[language as Language] || errorMessages['en']!,
         created_at: new Date().toISOString(),
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -220,6 +251,13 @@ Keep responses concise but informative. Use simple language accessible to all ed
   }
 
   const langInfo = getLangInfo(language);
+  
+  // Get localized suggestions based on language
+  const suggestions = [
+    t('chat.suggestion1', language as Language),
+    t('chat.suggestion2', language as Language),
+    t('chat.suggestion3', language as Language),
+  ];
 
   return (
     <div className="min-h-screen bg-[#FAFBFC] flex flex-col">
@@ -229,10 +267,10 @@ Keep responses concise but informative. Use simple language accessible to all ed
           <div>
             <h1 className="text-xl font-bold text-white flex items-center gap-2">
               <MessageCircle className="w-6 h-6" />
-              Bharat Lens AI
+              {t('chat.title', language as Language)}
             </h1>
             <p className="text-white/70 text-sm">
-              Ask in {langInfo.nativeName} or any language • Replying in {langInfo.nativeName} + English
+              {t('chat.replyIn', language as Language).replace('{lang}', langInfo.nativeName)}
             </p>
           </div>
           <button
@@ -251,48 +289,20 @@ Keep responses concise but informative. Use simple language accessible to all ed
             <div className="w-20 h-20 bg-[#1B3A6B]/10 rounded-full flex items-center justify-center mx-auto mb-4">
               <MessageCircle className="w-10 h-10 text-[#1B3A6B]" />
             </div>
-            <h3 className="text-lg font-medium text-[#1A1A2E] mb-2">How can I help you?</h3>
+            <h3 className="text-lg font-medium text-[#1A1A2E] mb-2">{t('chat.howCanIHelp', language as Language)}</h3>
             <p className="text-gray-500 max-w-xs mx-auto">
-              Ask me about government schemes, document requirements, application processes, or anything else!
+              {t('chat.askAbout', language as Language)}
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2">
-              {language === 'hi' ? (
-                <>
-                  {['किसानों के लिए योजनाएं', 'पासपोर्ट के लिए दस्तावेज़', 'संदिग्ध संदेश जांचें'].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setMessage(suggestion)}
-                      className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700 hover:bg-gray-200 transition"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </>
-              ) : language === 'ta' ? (
-                <>
-                  {['விவசாயிகளுக்கான திட்டங்கள்', 'பாஸ்போர்ட்டுக்கான ஆவணங்கள்', 'சந்தேகத்திற்குரிய செய்தியை சரிபார்க்கவும்'].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setMessage(suggestion)}
-                      className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700 hover:bg-gray-200 transition"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </>
-              ) : (
-                <>
-                  {['Find schemes for farmers', 'What documents for passport?', 'Check a suspicious message'].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      onClick={() => setMessage(suggestion)}
-                      className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700 hover:bg-gray-200 transition"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </>
-              )}
+              {suggestions.map((suggestion, i) => (
+                <button
+                  key={i}
+                  onClick={() => setMessage(suggestion)}
+                  className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700 hover:bg-gray-200 transition"
+                >
+                  {suggestion}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -322,7 +332,7 @@ Keep responses concise but informative. Use simple language accessible to all ed
                   onClick={() => isSpeaking ? stopSpeaking() : speakMessage(msg.content)}
                   className="mt-2 text-xs text-[#1B3A6B] hover:text-[#2A4A8B] flex items-center gap-1"
                 >
-                  {isSpeaking ? '🔊 Stop' : '🔊 Listen'}
+                  {isSpeaking ? t('chat.stop', language as Language) : t('chat.listen', language as Language)}
                 </button>
               )}
             </div>
@@ -342,8 +352,15 @@ Keep responses concise but informative. Use simple language accessible to all ed
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[#1B3A6B]">{langInfo.nativeName === 'English' ? 'Generating answer' : 'जवाब बना रहा हूं'}<span className="inline-flex ml-0.5"><span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'0ms'}} /><span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce ml-0.5" style={{animationDelay:'200ms'}} /><span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce ml-0.5" style={{animationDelay:'400ms'}} /></span></p>
-                  <p className="text-xs text-gray-400">{langInfo.nativeName === 'English' ? 'Please wait — reading government sources...' : 'कृपया प्रतीक्षा करें — सरकारी स्रोत पढ़ रहा हूं...'}</p>
+                  <p className="text-sm font-medium text-[#1B3A6B]">
+                    {t('chat.generating', language as Language)}
+                    <span className="inline-flex ml-0.5">
+                      <span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
+                      <span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce ml-0.5" style={{animationDelay:'200ms'}} />
+                      <span className="w-1.5 h-1.5 bg-[#1B3A6B] rounded-full animate-bounce ml-0.5" style={{animationDelay:'400ms'}} />
+                    </span>
+                  </p>
+                  <p className="text-xs text-gray-400">{t('chat.pleaseWait', language as Language)}</p>
                 </div>
               </div>
             </div>
@@ -361,9 +378,7 @@ Keep responses concise but informative. Use simple language accessible to all ed
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder={language === 'hi' ? 'सरकारी योजनाओं के बारे में पूछें...' : 
-                           language === 'ta' ? 'அரசு திட்டங்களைப் பற்றி கேளுங்கள்...' :
-                           'Ask about government schemes...'}
+              placeholder={t('chat.placeholder', language as Language)}
               className="w-full px-4 py-3 bg-gray-100 rounded-xl resize-none outline-none focus:ring-2 focus:ring-[#1B3A6B] transition"
               rows={1}
               style={{ maxHeight: '120px' }}
@@ -397,9 +412,7 @@ Keep responses concise but informative. Use simple language accessible to all ed
         </div>
         
         <p className="text-xs text-gray-400 mt-2 text-center">
-          {language === 'hi' ? 'AI उत्तर केवल मार्गदर्शन के लिए हैं। हमेशा आधिकारिक स्रोतों से सत्यापित करें।' :
-           language === 'ta' ? 'AI பதில்கள் வழிகாட்டுதல்களுக்காக மட்டும் உள்ளன. எப்போதும் அதிகாரப்பூர்வ மூலங்களைச் சரிபார்க்கவும்.' :
-           'AI responses are for guidance only. Always verify with official sources.'}
+          {t('chat.aiGuidance', language as Language)}
         </p>
       </div>
     </div>

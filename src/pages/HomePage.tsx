@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { useRouter } from '../lib/Router';
-import { t } from '../lib/i18n';
+import { t, getGreeting } from '../lib/i18n';
 import { Link } from '../lib/Router';
 import { 
   Camera, MessageCircle, FolderOpen, Search, 
   Calendar, ChevronRight, Bell, Shield, Users,
   Sparkles
 } from 'lucide-react';
+import type { Language } from '../lib/i18n';
 
 interface Reminder {
   id: string;
@@ -25,6 +26,7 @@ interface Scheme {
 
 export function HomePage() {
   const { profile, language } = useApp();
+  const lang = language as Language;
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,12 +73,8 @@ export function HomePage() {
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
   }
 
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 17) return 'Good Afternoon';
-    return 'Good Evening';
-  };
+  const greeting = getGreeting(lang);
+  const userName = profile?.full_name || t('home.greeting', lang);
 
   return (
     <div className="min-h-screen bg-[#FAFBFC] pb-24">
@@ -84,9 +82,9 @@ export function HomePage() {
       <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-6 pt-12 pb-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="text-white/70 text-sm">{greeting()}</p>
+            <p className="text-white/70 text-sm">{greeting}</p>
             <h1 className="text-2xl font-bold text-white">
-              {profile?.full_name || 'Namaste'} 🙏
+              {userName} 🙏
             </h1>
           </div>
           <Link to="/settings" className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
@@ -103,7 +101,7 @@ export function HomePage() {
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center">
               <Camera className="w-6 h-6 text-[#1B3A6B]" />
             </div>
-            <span className="text-white text-xs font-medium">Scan</span>
+            <span className="text-white text-xs font-medium">{t('nav.scan', lang)}</span>
           </Link>
           
           <Link
@@ -113,7 +111,7 @@ export function HomePage() {
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center">
               <MessageCircle className="w-6 h-6 text-[#1B3A6B]" />
             </div>
-            <span className="text-white text-xs font-medium">Chat</span>
+            <span className="text-white text-xs font-medium">{t('nav.chat', lang)}</span>
           </Link>
           
           <Link
@@ -123,7 +121,7 @@ export function HomePage() {
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center">
               <FolderOpen className="w-6 h-6 text-[#1B3A6B]" />
             </div>
-            <span className="text-white text-xs font-medium">Vault</span>
+            <span className="text-white text-xs font-medium">{t('nav.vault', lang)}</span>
           </Link>
           
           <Link
@@ -133,7 +131,7 @@ export function HomePage() {
             <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center">
               <Search className="w-6 h-6 text-[#1B3A6B]" />
             </div>
-            <span className="text-white text-xs font-medium">Schemes</span>
+            <span className="text-white text-xs font-medium">{t('nav.schemes', lang)}</span>
           </Link>
         </div>
       </div>
@@ -145,10 +143,10 @@ export function HomePage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-[#1A1A2E] flex items-center gap-2">
               <Bell className="w-5 h-5 text-[#FF7A00]" />
-              Upcoming Reminders
+              {t('home.upcomingReminders', lang)}
             </h2>
             <Link to="/reminders" className="text-[#1B3A6B] text-sm font-medium flex items-center gap-1">
-              View All <ChevronRight className="w-4 h-4" />
+              {t('home.viewAll', lang)} <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
           
@@ -190,7 +188,7 @@ export function HomePage() {
                             ? 'bg-amber-100 text-amber-600' 
                             : 'bg-green-100 text-green-600'
                       }`}>
-                        {days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days} days`}
+                        {days === 0 ? t('home.today', lang) : days === 1 ? t('home.tomorrow', lang) : `${days} ${t('home.days', lang)}`}
                       </span>
                     </div>
                   </Link>
@@ -200,12 +198,12 @@ export function HomePage() {
           ) : (
             <div className="p-6 bg-white rounded-xl border border-gray-100 text-center">
               <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              <p className="text-gray-500">No upcoming reminders</p>
+              <p className="text-gray-500">{t('home.noReminders', lang)}</p>
               <Link 
                 to="/reminders" 
                 className="inline-block mt-3 text-[#1B3A6B] font-medium text-sm"
               >
-                Add a reminder
+                {t('home.addReminder', lang)}
               </Link>
             </div>
           )}
@@ -216,10 +214,10 @@ export function HomePage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-[#1A1A2E] flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-[#0F9D58]" />
-              Schemes For You
+              {t('home.recommendedSchemes', lang)}
             </h2>
             <Link to="/schemes" className="text-[#1B3A6B] text-sm font-medium flex items-center gap-1">
-              View All <ChevronRight className="w-4 h-4" />
+              {t('home.viewAll', lang)} <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
           
@@ -241,7 +239,7 @@ export function HomePage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="verified-badge verified">
-                          ✓ Verified
+                          {t('home.verified', lang)}
                         </span>
                       </div>
                       <h3 className="font-medium text-[#1A1A2E]">{scheme.title}</h3>
@@ -255,14 +253,14 @@ export function HomePage() {
           ) : (
             <div className="p-6 bg-white rounded-xl border border-gray-100 text-center">
               <Search className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              <p className="text-gray-500">Complete your profile to see relevant schemes</p>
+              <p className="text-gray-500">{t('home.noSchemes', lang)}</p>
             </div>
           )}
         </section>
 
         {/* Other Actions */}
         <section>
-          <h2 className="text-lg font-semibold text-[#1A1A2E] mb-4">Quick Actions</h2>
+          <h2 className="text-lg font-semibold text-[#1A1A2E] mb-4">{t('home.quickActions', lang)}</h2>
           <div className="grid grid-cols-2 gap-3">
             <Link
               to="/apps"
@@ -271,8 +269,8 @@ export function HomePage() {
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
                 <span className="text-xl">📋</span>
               </div>
-              <p className="font-medium text-[#1A1A2E]">My Applications</p>
-              <p className="text-sm text-gray-500">Track your progress</p>
+              <p className="font-medium text-[#1A1A2E]">{t('home.myApplications', lang)}</p>
+              <p className="text-sm text-gray-500">{t('home.trackProgress', lang)}</p>
             </Link>
             
             <Link
@@ -282,8 +280,8 @@ export function HomePage() {
               <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mb-3">
                 <Shield className="w-5 h-5 text-[#0F9D58]" />
               </div>
-              <p className="font-medium text-[#1A1A2E]">Scam Shield</p>
-              <p className="text-sm text-gray-500">Check suspicious messages</p>
+              <p className="font-medium text-[#1A1A2E]">{t('home.scamShield', lang)}</p>
+              <p className="text-sm text-gray-500">{t('home.checkMessages', lang)}</p>
             </Link>
             
             <Link
@@ -293,8 +291,8 @@ export function HomePage() {
               <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
                 <Users className="w-5 h-5 text-[#1B3A6B]" />
               </div>
-              <p className="font-medium text-[#1A1A2E]">Family Mode</p>
-              <p className="text-sm text-gray-500">Manage family documents</p>
+              <p className="font-medium text-[#1A1A2E]">{t('home.familyMode', lang)}</p>
+              <p className="text-sm text-gray-500">{t('home.manageDocs', lang)}</p>
             </Link>
             
             <Link
@@ -304,8 +302,8 @@ export function HomePage() {
               <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mb-3">
                 <span className="text-xl">⚙️</span>
               </div>
-              <p className="font-medium text-[#1A1A2E]">Settings</p>
-              <p className="text-sm text-gray-500">Language, notifications</p>
+              <p className="font-medium text-[#1A1A2E]">{t('home.settings', lang)}</p>
+              <p className="text-sm text-gray-500">{t('home.languageNotifications', lang)}</p>
             </Link>
           </div>
         </section>
@@ -313,8 +311,7 @@ export function HomePage() {
 
       {/* Disclaimer */}
       <div className="disclaimer">
-        Bharat Lens provides AI-assisted guidance and is not affiliated with the Government of India. 
-        Always verify critical actions through official sources.
+        {t('disclaimer.text', lang)}
       </div>
     </div>
   );
