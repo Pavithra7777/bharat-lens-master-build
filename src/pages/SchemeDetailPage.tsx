@@ -24,8 +24,8 @@ interface Scheme {
   applicable_states?: string[];
   coverage?: string;
   benefit_type?: string;
-  benefit_amount_min?: number;
-  benefit_amount_max?: number;
+  benefit_amount_min?: number | null;
+  benefit_amount_max?: number | null;
   benefit_amount_text?: string;
   required_documents?: string[];
   application_mode?: string[];
@@ -69,13 +69,11 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
     }
     
     try {
-      // Try UUID comparison first
       let r = await db.query<Scheme>(
         'SELECT * FROM schemes WHERE id = $1',
         [schemeId]
       );
       
-      // If no results, try text comparison (handles edge cases)
       if (r.ok && r.rows && r.rows.length === 0) {
         r = await db.query<Scheme>(
           "SELECT * FROM schemes WHERE id::text = $1",
@@ -83,7 +81,6 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
         );
       }
       
-      // If still no results, try ILIKE (for case-insensitive matching)
       if (r.ok && r.rows && r.rows.length === 0) {
         r = await db.query<Scheme>(
           "SELECT * FROM schemes WHERE LOWER(id::text) = LOWER($1)",
@@ -123,6 +120,11 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
   function getGoogleSearchUrl() {
     const query = `${scheme?.title || ''} India government scheme official website apply`;
     return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  }
+
+  function formatCurrency(value: number | null | undefined): string {
+    if (value == null) return '';
+    return value.toLocaleString();
   }
 
   if (loading) {
@@ -223,20 +225,20 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
       )}
 
       {/* Amount Details */}
-      {(scheme.benefit_amount_min || scheme.benefit_amount_max || scheme.benefit_amount_text) && (
+      {(scheme.benefit_amount_min != null || scheme.benefit_amount_max != null || scheme.benefit_amount_text) && (
         <div className="px-4 mt-4">
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
             <h3 className="font-semibold text-blue-800 mb-2">Financial Assistance</h3>
             {scheme.benefit_amount_text && (
               <p className="text-blue-700 font-medium">{scheme.benefit_amount_text}</p>
             )}
-            {scheme.benefit_amount_min && scheme.benefit_amount_max && (
+            {scheme.benefit_amount_min != null && scheme.benefit_amount_max != null && (
               <p className="text-blue-700">
-                ₹{scheme.benefit_amount_min.toLocaleString()} - ₹{scheme.benefit_amount_max.toLocaleString()}
+                ₹{formatCurrency(scheme.benefit_amount_min)} - ₹{formatCurrency(scheme.benefit_amount_max)}
               </p>
             )}
-            {scheme.benefit_amount_min && !scheme.benefit_amount_max && (
-              <p className="text-blue-700">₹{scheme.benefit_amount_min.toLocaleString()}+</p>
+            {scheme.benefit_amount_min != null && scheme.benefit_amount_max == null && (
+              <p className="text-blue-700">₹{formatCurrency(scheme.benefit_amount_min)}+</p>
             )}
           </div>
         </div>
@@ -273,7 +275,7 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
               <p className="text-gray-900 font-medium">{scheme.gender}</p>
             </div>
           )}
-          {scheme.min_age !== undefined && (
+          {scheme.min_age != null && (
             <div className="p-4 border-b border-gray-100">
               <p className="text-sm text-gray-500 mb-1">Age</p>
               <p className="text-gray-900">
@@ -281,10 +283,10 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
               </p>
             </div>
           )}
-          {scheme.income_limit !== undefined && (
+          {scheme.income_limit != null && (
             <div className="p-4 border-b border-gray-100">
               <p className="text-sm text-gray-500 mb-1">Income Limit</p>
-              <p className="text-gray-900">Up to ₹{scheme.income_limit.toLocaleString()} per annum</p>
+              <p className="text-gray-900">Up to ₹{formatCurrency(scheme.income_limit)} per annum</p>
             </div>
           )}
           {scheme.domicile_required !== undefined && (
@@ -329,8 +331,8 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
               </div>
             </div>
           )}
-          {(!scheme.category_eligible && !scheme.gender && scheme.min_age === undefined && 
-           scheme.income_limit === undefined && scheme.domicile_required === undefined &&
+          {(!scheme.category_eligible && !scheme.gender && scheme.min_age == null && 
+           scheme.income_limit == null && scheme.domicile_required === undefined &&
            (!scheme.professions || scheme.professions.length === 0) &&
            (!scheme.student_levels || scheme.student_levels.length === 0) &&
            (!scheme.employment_status || scheme.employment_status.length === 0)) && (
