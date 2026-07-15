@@ -82,41 +82,10 @@ export function ScanPage() {
       try {
         const openaiResult = await createDoableClient().integrations.run('openai', 'vision_prompt', {
           image: `data:image/jpeg;base64,${base64Data}`,
-          prompt: `You are Bharat Lens - India's premier government scheme finder. Analyze this image and extract ALL information about government schemes.
-
-For EACH government scheme you find, provide detailed information in this exact JSON format:
-{
-  "schemes": [
-    {
-      "name": "Full official scheme name in English",
-      "category": "Category (Education/Healthcare/Agriculture/Women/Youth/Senior Citizen/Others)",
-      "ministry": "Managing Ministry/Department name",
-      "official_url": "Official government website URL (e.g., pmjay.gov.in, pmkisan.gov.in)",
-      "apply_url": "Direct application link or pmbjp portal",
-      "eligibility": "Who is eligible to apply (be specific)",
-      "benefits": "What benefits are provided",
-      "documents": "Required documents list",
-      "how_to_apply": "Step-by-step application process",
-      "status": "Active/Seasonal",
-      "description": "2-3 sentence description of the scheme"
-    }
-  ],
-  "document_type": "What type of document is this (scheme poster, form, screenshot, official notice, etc.)",
-  "extracted_text": "All readable text from the image verbatim",
-  "is_scam": false,
-  "scam_warnings": [],
-  "recommendations": ["What user should do next - apply, verify, avoid, etc."]
-}
-
-IMPORTANT RULES:
-1. Only include REAL, VERIFIED Indian government schemes (PM-Kisan, Ayushman Bharat, Ujjwala, Sukanya Samriddhi, PM Fasal Bima Yojana, etc.)
-2. If NO government schemes are found, return empty schemes array
-3. For official_url, use REAL government domains (.gov.in, .nic.in) or official portals like pmjay.gov.in, pmkisan.gov.in
-4. For apply_url, use actual application portals or direct links to apply
-5. Be specific about eligibility criteria for each scheme
-6. List actual required documents
-7. Return ONLY valid JSON, no other text`,
-          detail: 'high'
+          prompt: `Quickly analyze this image for Indian government schemes. Return JSON:
+{"schemes":[{"name":"scheme name","category":"Education/Healthcare/Agriculture/Women/Youth/Others","ministry":"Ministry name","official_url":"gov.in URL","apply_url":"application link","eligibility":"who qualifies","benefits":"what you get","documents":"required docs","how_to_apply":"steps","status":"Active","description":"brief description"}],"document_type":"type of document","extracted_text":"readable text","is_scam":false,"scam_warnings":[],"recommendations":["next steps"]}
+Only include REAL Indian government schemes. Return empty schemes array if none found. Return ONLY valid JSON.`,
+          detail: 'auto'
         });
         
         if (openaiResult.success && openaiResult.data) {
@@ -252,7 +221,7 @@ For EACH government scheme mentioned, provide detailed information:
 }
 
 Return ONLY valid JSON.`,
-          detail: 'high'
+          detail: 'auto'
         });
         
         if (openaiResult.success && openaiResult.data) {
