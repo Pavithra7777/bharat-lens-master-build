@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { db } from '@doable/data';
-import { useApp } from '../lib/AppContext';
 import { Calendar, List, Plus, Bell, Check, Trash2 } from 'lucide-react';
 
 interface Reminder {
@@ -20,21 +19,21 @@ export function RemindersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState('');
-  const { profile } = useApp();
 
   useEffect(() => {
     loadReminders();
-  }, [profile?.id]);
+  }, []);
 
   async function loadReminders() {
-    if (!profile) return;
     setLoading(true);
     try {
+      // Query all reminders - RLS handles owner filtering
       const r = await db.query<Reminder>(
-        'SELECT * FROM reminders WHERE owner_id = $1 ORDER BY due_date ASC',
-        [profile.id]
+        'SELECT * FROM reminders ORDER BY due_date ASC'
       );
-      if (r.ok && r.rows) setReminders(r.rows);
+      if (r.ok && r.rows) {
+        setReminders(r.rows);
+      }
     } catch (error) {
       console.error('Load reminders failed:', error);
     } finally {
@@ -43,12 +42,12 @@ export function RemindersPage() {
   }
 
   async function addReminder() {
-    if (!newTitle.trim() || !newDate || !profile) return;
+    if (!newTitle.trim() || !newDate) return;
     
     try {
       const r = await db.query<Reminder>(
-        'INSERT INTO reminders (owner_id, title, due_date) VALUES ($1, $2, $3) RETURNING *',
-        [profile.id, newTitle.trim(), newDate]
+        'INSERT INTO reminders (title, due_date) VALUES ($1, $2) RETURNING *',
+        [newTitle.trim(), newDate]
       );
       if (r.ok && r.rows.length > 0 && r.rows[0]) {
         const newReminder = r.rows[0];

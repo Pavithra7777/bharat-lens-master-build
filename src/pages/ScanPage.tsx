@@ -169,15 +169,37 @@ If NO schemes are found, return: {"schemes_found": [], "summary": "No government
     if (!result) return;
     setSaving(true);
     try {
-      await db.query(`INSERT INTO scam_reports (input_type, raw_content, ai_verdict, ai_reasoning) VALUES ($1, $2, $3, $4)`, [
-        result.document_type || 'unknown',
-        result.extracted_text || result.summary || '',
-        result.is_scam ? 'SCAM' : 'VERIFIED',
-        JSON.stringify(result)
-      ]);
-      setSaveSuccess('Saved!');
+      // Save to vault_items table so it shows in Vault page
+      const schemeCount = result.schemes_found?.length || 0;
+      const title = schemeCount > 0 
+        ? `Scan: ${schemeCount} scheme(s) found`
+        : `Scan: ${result.document_type || 'Document'} analyzed`;
+      
+      const description = result.summary || result.extracted_text?.substring(0, 200) || 'Analyzed document';
+      
+      await db.query(
+        `INSERT INTO vault_items (title, description, category, item_type, metadata) 
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          title,
+          description,
+          'scan',
+          'scan_result',
+          JSON.stringify({
+            extracted_text: result.extracted_text,
+            schemes_found: result.schemes_found,
+            is_scam: result.is_scam,
+            scam_warnings: result.scam_warnings,
+            recommendations: result.recommendations,
+            document_type: result.document_type,
+            saved_at: new Date().toISOString()
+          })
+        ]
+      );
+      setSaveSuccess('Saved to Vault!');
       setTimeout(() => setSaveSuccess(''), 2000);
     } catch (e) {
+      console.error('Save failed:', e);
       setError('Save failed');
     } finally {
       setSaving(false);
@@ -329,7 +351,7 @@ If NO schemes are found, return: {"schemes_found": [], "summary": "No government
             <div className="flex gap-3">
               <button onClick={handleSave} disabled={saving} className="flex-1 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50">
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : saveSuccess ? <CheckCircle className="w-5 h-5" /> : <Save className="w-5 h-5" />}
-                {saveSuccess || 'Save'}
+                {saveSuccess || 'Save to Vault'}
               </button>
               <button onClick={() => navigate('/chat')} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium flex items-center justify-center gap-2">
                 <MessageCircle className="w-5 h-5" /> Chat
