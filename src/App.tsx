@@ -14,6 +14,7 @@ import { ScanPage } from './pages/ScanPage';
 import { ChatPage } from './pages/ChatPage';
 import { VaultPage } from './pages/VaultPage';
 import { SchemesPage } from './pages/SchemesPage';
+import { SchemeDetailPage } from './pages/SchemeDetailPage';
 import { ApplicationsPage } from './pages/ApplicationsPage';
 import { RemindersPage } from './pages/RemindersPage';
 import { ScamPage } from './pages/ScamPage';
@@ -161,6 +162,12 @@ function AppContent() {
 }
 
 function PageRouter({ currentPath }: { currentPath: string }) {
+  // Handle scheme detail route
+  const schemeMatch = currentPath.match(/^\/schemes\/([^/]+)$/);
+  if (schemeMatch && schemeMatch[1]) {
+    return <SchemeDetailPage schemeId={schemeMatch[1]} />;
+  }
+
   switch (currentPath) {
     case '/':
       return <HomePage />;
@@ -185,9 +192,6 @@ function PageRouter({ currentPath }: { currentPath: string }) {
     case '/auth':
       return <AuthPage />;
     default:
-      if (currentPath.startsWith('/schemes/')) {
-        return <SchemesPage />;
-      }
       return <HomePage />;
   }
 }

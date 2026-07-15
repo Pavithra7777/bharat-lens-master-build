@@ -6,13 +6,13 @@
 5 silly config load:file:/usr/etc/npmrc
 6 verbose title npm run build
 7 verbose argv "run" "build"
-8 verbose logfile logs-max:10 dir:/work/.npm/_logs/2026-07-15T12_58_07_659Z-
-9 verbose logfile /work/.npm/_logs/2026-07-15T12_58_07_659Z-debug-0.log
+8 verbose logfile logs-max:10 dir:/work/.npm/_logs/2026-07-15T14_04_43_250Z-
+9 verbose logfile /work/.npm/_logs/2026-07-15T14_04_43_250Z-debug-0.log
 10 silly logfile start cleaning logs, removing 1 files
 11 silly logfile done cleaning log files
 12 verbose cwd /work
 13 verbose os Linux 6.8.0-100-generic
 14 verbose node v22.22.3
 15 verbose npm  v10.9.8
-16 verbose exit 0
-17 info ok
+16 verbose exit 1
+17 verbose code 1
