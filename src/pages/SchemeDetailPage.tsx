@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '@doable/data';
 import { Link } from '../lib/Router';
-import { ArrowLeft, ExternalLink, CheckCircle, FileText, MapPin, Briefcase, Users, Calendar, Phone, Globe, Heart, Shield, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, ExternalLink, CheckCircle, FileText, MapPin, Briefcase, Users, Calendar, Phone, Globe, Heart, Shield, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 
 interface Scheme {
   id: string;
@@ -50,6 +50,8 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
 
   useEffect(() => {
     loadScheme();
+    // Scroll to top when scheme changes
+    window.scrollTo(0, 0);
   }, [schemeId]);
 
   async function loadScheme() {
@@ -63,11 +65,11 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
       if (r.ok && r.rows.length > 0) {
         setScheme(r.rows[0] as Scheme);
       } else {
-        setError('Scheme not found');
+        setError('Scheme not found in database');
       }
     } catch (err) {
       console.error('Failed to load scheme:', err);
-      setError('Failed to load scheme details');
+      setError('Failed to load scheme details. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -75,11 +77,18 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
 
   function handleApply() {
     if (scheme?.official_url) {
+      // Direct link to official URL
       window.open(scheme.official_url, '_blank', 'noopener,noreferrer');
     } else {
-      // Fallback to searching for the scheme online
-      window.open(`https://www.google.com/search?q=${encodeURIComponent(scheme?.title + ' India government scheme official website')}`, '_blank', 'noopener,noreferrer');
+      // Fallback: search for the scheme on government portals
+      const searchQuery = `${scheme?.title || 'government scheme'} India official website apply online`;
+      window.open(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank', 'noopener,noreferrer');
     }
+  }
+
+  function getGoogleSearchUrl() {
+    const query = `${scheme?.title || ''} India government scheme official website apply`;
+    return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
   }
 
   if (loading) {
@@ -105,7 +114,7 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
         </div>
         <div className="p-6 text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-8 h-8 text-gray-400" />
+            <AlertCircle className="w-8 h-8 text-gray-400" />
           </div>
           <p className="text-gray-600 mb-4">{error || 'This scheme could not be found.'}</p>
           <Link to="/schemes" className="inline-block px-6 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium">
@@ -117,7 +126,7 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFBFC]">
+    <div className="min-h-screen bg-[#FAFBFC] pb-24">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-4 pt-12 pb-6">
         <Link to="/schemes" className="flex items-center gap-2 text-white/80 hover:text-white mb-4">
@@ -126,13 +135,18 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
         </Link>
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="px-3 py-1 bg-white/20 text-white rounded-full text-xs font-medium">
                 {scheme.category}
               </span>
               {scheme.benefit_type && (
                 <span className="px-3 py-1 bg-green-500/30 text-green-200 rounded-full text-xs font-medium">
                   {scheme.benefit_type}
+                </span>
+              )}
+              {scheme.is_active !== false && (
+                <span className="px-3 py-1 bg-blue-500/30 text-blue-200 rounded-full text-xs font-medium">
+                  Active
                 </span>
               )}
             </div>
@@ -148,11 +162,15 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
           className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-lg shadow-lg flex items-center justify-center gap-3 transition"
         >
           <ExternalLink className="w-5 h-5" />
-          Apply Now / Official Website
+          {scheme.official_url ? 'Apply Now on Official Website' : 'Search to Apply'}
         </button>
-        {scheme.official_url && (
-          <p className="text-center text-xs text-gray-500 mt-2">
+        {scheme.official_url ? (
+          <p className="text-center text-xs text-gray-500 mt-2 truncate">
             Opens: {scheme.official_url}
+          </p>
+        ) : (
+          <p className="text-center text-xs text-gray-500 mt-2">
+            Official link not available, will search for you
           </p>
         )}
       </div>
@@ -277,6 +295,15 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
               </div>
             </div>
           )}
+          {(!scheme.category_eligible && !scheme.gender && scheme.min_age === undefined && 
+           scheme.income_limit === undefined && scheme.domicile_required === undefined &&
+           (!scheme.professions || scheme.professions.length === 0) &&
+           (!scheme.student_levels || scheme.student_levels.length === 0) &&
+           (!scheme.employment_status || scheme.employment_status.length === 0)) && (
+            <div className="p-4 text-gray-500 text-sm">
+              Specific eligibility criteria not available. Please visit the official website for details.
+            </div>
+          )}
         </div>
       </div>
 
@@ -379,7 +406,7 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
               </div>
             </div>
           )}
-          {scheme.official_url && (
+          {scheme.official_url ? (
             <div className="p-4 flex items-center gap-3">
               <Globe className="w-5 h-5 text-gray-400" />
               <div className="flex-1 min-w-0">
@@ -394,6 +421,21 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
                 </a>
               </div>
             </div>
+          ) : (
+            <div className="p-4 flex items-center gap-3">
+              <Globe className="w-5 h-5 text-gray-400" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-500">Official Website</p>
+                <a 
+                  href={getGoogleSearchUrl()}
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-600 font-medium hover:underline"
+                >
+                  Search for official website →
+                </a>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -405,12 +447,9 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
           className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition"
         >
           <ExternalLink className="w-5 h-5" />
-          Apply Now / Visit Official Website
+          {scheme.official_url ? 'Apply Now on Official Website' : 'Search to Apply'}
         </button>
       </div>
-
-      {/* Bottom padding for fixed button */}
-      <div className="h-24" />
     </div>
   );
 }

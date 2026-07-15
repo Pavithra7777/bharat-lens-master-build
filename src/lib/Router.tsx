@@ -1,41 +1,44 @@
-import { createContext, useContext, useState, useEffect, type ReactNode, type ComponentType } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from 'react';
 
 // Simple hash-based router
 
 interface RouterContextType {
   currentPath: string;
   navigate: (path: string) => void;
-  params: Record<string, string>;
 }
 
 const RouterContext = createContext<RouterContextType | null>(null);
 
 export function RouterProvider({ children }: { children: ReactNode }) {
-  const [currentPath, setCurrentPath] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const hash = window.location.hash.slice(1) || '/';
-      return hash;
-    }
-    return '/';
-  });
-  const [params, setParams] = useState<Record<string, string>>({});
-
+  const [currentPath, setCurrentPath] = useState('/');
+  
+  // Initialize from current hash
   useEffect(() => {
-    function handleHashChange() {
-      const hash = window.location.hash.slice(1) || '/';
+    const hash = window.location.hash.slice(1);
+    if (hash) {
       setCurrentPath(hash);
     }
-
+  }, []);
+  
+  // Listen for hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1) || '/';
+      setCurrentPath(hash);
+    };
+    
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  function navigate(path: string) {
+  const navigate = useCallback((path: string) => {
     window.location.hash = path;
-  }
+    // Force update immediately for better responsiveness
+    setCurrentPath(path);
+  }, []);
 
   return (
-    <RouterContext.Provider value={{ currentPath, navigate, params }}>
+    <RouterContext.Provider value={{ currentPath, navigate }}>
       {children}
     </RouterContext.Provider>
   );
@@ -55,10 +58,15 @@ export function Link({ to, children, className, onClick }: {
   className?: string;
   onClick?: () => void;
 }) {
+  const { navigate } = useRouter();
+  
   function handleClick(e: React.MouseEvent) {
     e.preventDefault();
-    if (onClick) onClick();
-    window.location.hash = to;
+    e.stopPropagation();
+    if (onClick) {
+      onClick();
+    }
+    navigate(to);
   }
 
   return (

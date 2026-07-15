@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '@doable/data';
 import { ai, type ChatMessage } from '@doable/ai';
 import { useApp } from '../lib/AppContext';
-import { Link } from '../lib/Router';
+import { useRouter, Link } from '../lib/Router';
 import { Search, Filter, ChevronRight, ExternalLink, CheckCircle, MapPin, Users, Briefcase, GraduationCap, Heart, Home, Sparkles, Loader2, Plus, X, SlidersHorizontal, Shield, FileText, Clock, Brain, Phone, RefreshCw, Zap, Globe, Calendar, CheckCircle2, AlertCircle } from 'lucide-react';
 
 interface LiveUpdateRecord {
@@ -448,7 +448,7 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
         ) : (
           <div className="space-y-3">
             {displayedSchemes.map(scheme => (
-              <Link key={scheme.id} to={`/schemes/${scheme.id}`}>
+              <Link key={scheme.id} to={`/schemes/${scheme.id}`} className="block cursor-pointer hover:opacity-90">
                 <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">

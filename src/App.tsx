@@ -48,6 +48,9 @@ function AppContent() {
   const { currentPath } = useRouter();
   const [showFullNav, setShowFullNav] = useState(false);
 
+  // Check if current page should show bottom nav (hide on detail pages)
+  const isDetailPage = currentPath.match(/^\/schemes\/[^/]+$/);
+  
   // Redirect to home when user logs in
   useEffect(() => {
     if (user && currentPath === '/auth') {
@@ -78,85 +81,90 @@ function AppContent() {
 
   return (
     <div className={simpleMode ? 'simple-mode' : ''}>
-      <div className="pb-20">
+      <div className={isDetailPage ? '' : 'pb-20'}>
         <PageRouter currentPath={currentPath} />
       </div>
 
-      <nav className="bottom-nav">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = currentPath === item.path || 
-            (item.path !== '/' && currentPath.startsWith(item.path));
-          
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`bottom-nav-item ${isActive ? 'active' : ''}`}
-            >
-              <Icon className="w-6 h-6" />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-        
-        {!showFullNav && (
-          <button
-            onClick={() => setShowFullNav(true)}
-            className="bottom-nav-item"
-          >
-            <span className="text-xl">⋯</span>
-            <span>More</span>
-          </button>
-        )}
-      </nav>
-
-      {showFullNav && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-40"
-          onClick={() => setShowFullNav(false)}
-        >
-          <div 
-            className="absolute bottom-20 left-0 right-0 bg-white rounded-t-3xl p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-[#1A1A2E]">More Options</h3>
+      {/* Hide bottom nav on detail pages */}
+      {!isDetailPage && (
+        <>
+          <nav className="bottom-nav">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = currentPath === item.path || 
+                (item.path !== '/' && currentPath.startsWith(item.path));
+              
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`bottom-nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <Icon className="w-6 h-6" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+            
+            {!showFullNav && (
               <button
-                onClick={() => setShowFullNav(false)}
-                className="text-gray-400 text-2xl"
+                onClick={() => setShowFullNav(true)}
+                className="bottom-nav-item"
               >
-                ✕
+                <span className="text-xl">⋯</span>
+                <span>More</span>
               </button>
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              {NAV_ITEMS_FULL.slice(5).map((item) => {
-                const Icon = item.icon;
-                const isActive = currentPath === item.path;
-                
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setShowFullNav(false)}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-xl ${
-                      isActive ? 'bg-[#1B3A6B]/10 text-[#1B3A6B]' : 'text-gray-500'
-                    }`}
-                  >
-                    <Icon className="w-6 h-6" />
-                    <span className="text-xs font-medium">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+            )}
+          </nav>
 
-      <footer className="disclaimer pb-4">
-        Bharat Lens provides AI-assisted guidance and is not affiliated with the Government of India. 
-        Always verify critical actions through official sources.
-      </footer>
+          {showFullNav && (
+            <div 
+              className="fixed inset-0 bg-black/50 z-40"
+              onClick={() => setShowFullNav(false)}
+            >
+              <div 
+                className="absolute bottom-20 left-0 right-0 bg-white rounded-t-3xl p-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-[#1A1A2E]">More Options</h3>
+                  <button
+                    onClick={() => setShowFullNav(false)}
+                    className="text-gray-400 text-2xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-4">
+                  {NAV_ITEMS_FULL.slice(5).map((item) => {
+                    const Icon = item.icon;
+                    const isActive = currentPath === item.path;
+                    
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setShowFullNav(false)}
+                        className={`flex flex-col items-center gap-2 p-3 rounded-xl ${
+                          isActive ? 'bg-[#1B3A6B]/10 text-[#1B3A6B]' : 'text-gray-500'
+                        }`}
+                      >
+                        <Icon className="w-6 h-6" />
+                        <span className="text-xs font-medium">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <footer className="disclaimer pb-4">
+            Bharat Lens provides AI-assisted guidance and is not affiliated with the Government of India. 
+            Always verify critical actions through official sources.
+          </footer>
+        </>
+      )}
     </div>
   );
 }
