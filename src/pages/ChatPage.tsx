@@ -87,9 +87,23 @@ export function ChatPage() {
     try {
       const langInfo = getLangInfo(language);
       const userName = profile?.full_name || 'User';
+      const isEnglishUser = language === 'en';
       
-      // Build context for AI - ask for bilingual response
-      const systemPrompt = `You are Bharat Lens AI, a helpful assistant for Indian government services.
+      // Build context for AI - bilingual only if preferred language is NOT English
+      let systemPrompt: string;
+      
+      if (isEnglishUser) {
+        // User's preferred language is English - respond ONLY in English
+        systemPrompt = `You are Bharat Lens AI, a helpful assistant for Indian government services.
+
+IMPORTANT: The user has selected English as their preferred language. Respond ONLY in English.
+
+Answer in a friendly, clear manner. Help citizens understand government schemes, documents, and processes.
+Always suggest verifying information from official government sources when appropriate.
+Keep responses concise but informative. Use simple language accessible to all education levels.`;
+      } else {
+        // User's preferred language is NOT English - respond in both their language AND English
+        systemPrompt = `You are Bharat Lens AI, a helpful assistant for Indian government services.
 
 CRITICAL INSTRUCTION - BILINGUAL RESPONSE:
 The user has selected "${langInfo.nativeName}" (${langInfo.name}) as their preferred language.
@@ -108,6 +122,7 @@ Keep both versions complete and equivalent. Do not skip the English version.
 Answer in a friendly, clear manner. Help citizens understand government schemes, documents, and processes.
 Always suggest verifying information from official government sources when appropriate.
 Keep responses concise but informative. Use simple language accessible to all education levels.`;
+      }
 
       let reply = '';
       
@@ -251,6 +266,7 @@ Keep responses concise but informative. Use simple language accessible to all ed
   }
 
   const langInfo = getLangInfo(language);
+  const isEnglishUser = language === 'en';
   
   // Get localized suggestions based on language
   const suggestions = [
@@ -270,7 +286,10 @@ Keep responses concise but informative. Use simple language accessible to all ed
               {t('chat.title', language as Language)}
             </h1>
             <p className="text-white/70 text-sm">
-              {t('chat.replyIn', language as Language).replace('{lang}', langInfo.nativeName)}
+              {isEnglishUser
+                ? t('chat.replyInEnglish', language as Language)
+                : t('chat.replyIn', language as Language).replace('{lang}', langInfo.nativeName)
+              }
             </p>
           </div>
           <button
@@ -319,10 +338,17 @@ Keep responses concise but informative. Use simple language accessible to all ed
                   : 'bg-white border border-gray-100 rounded-bl-md shadow-sm'
               }`}
             >
-              {msg.role === 'assistant' && (
+              {msg.role === 'assistant' && !isEnglishUser && (
                 <div className="mb-2 flex items-center gap-2">
                   <span className="text-xs px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] rounded-full">
                     {langInfo.nativeName} + English
+                  </span>
+                </div>
+              )}
+              {msg.role === 'assistant' && isEnglishUser && (
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="text-xs px-2 py-0.5 bg-[#0F9D58]/10 text-[#0F9D58] rounded-full">
+                    English
                   </span>
                 </div>
               )}
