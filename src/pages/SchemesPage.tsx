@@ -1,9 +1,29 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '@doable/data';
 import { ai, type ChatMessage } from '@doable/ai';
 import { useApp } from '../lib/AppContext';
 import { Link } from '../lib/Router';
-import { Search, Filter, ChevronRight, ExternalLink, CheckCircle, MapPin, Users, Briefcase, GraduationCap, Heart, Home, Sparkles, Loader2, Plus, X, SlidersHorizontal, Shield, FileText, Clock, Brain, Phone } from 'lucide-react';
+import { Search, Filter, ChevronRight, ExternalLink, CheckCircle, MapPin, Users, Briefcase, GraduationCap, Heart, Home, Sparkles, Loader2, Plus, X, SlidersHorizontal, Shield, FileText, Clock, Brain, Phone, RefreshCw, Zap, Globe, Calendar, CheckCircle2, AlertCircle } from 'lucide-react';
+
+interface LiveUpdateRecord {
+  id: string;
+  last_fetched_at: string;
+  schemes_found_count: number;
+  new_schemes_count: number;
+  status: string;
+  source_name: string;
+}
+
+interface NewScheme {
+  name: string;
+  url: string;
+  description: string;
+  eligibility: string;
+  benefits: string;
+  how_to_apply: string;
+  department: string;
+  category: string;
+}
 
 interface Scheme {
   id: string;
@@ -89,11 +109,131 @@ export function SchemesPage() {
   const [selectedScheme, setSelectedScheme] = useState<Scheme | null>(null);
   const [tab, setTab] = useState<'for-you' | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [liveUpdating, setLiveUpdating] = useState(false);
+  const [lastLiveUpdate, setLastLiveUpdate] = useState<LiveUpdateRecord | null>(null);
+  const [newSchemesFromUpdate, setNewSchemesFromUpdate] = useState<NewScheme[]>([]);
   const { profile } = useApp();
 
   useEffect(() => {
     loadSchemes();
+    loadLastUpdateInfo();
   }, [profile]);
+
+  async function loadLastUpdateInfo() {
+    try {
+      const r = await db.query<LiveUpdateRecord>(
+        'SELECT * FROM live_scheme_updates ORDER BY last_fetched_at DESC LIMIT 1'
+      );
+      if (r.ok && r.rows.length > 0) {
+        setLastLiveUpdate(r.rows[0] as LiveUpdateRecord);
+      }
+    } catch (error) {
+      console.error('Failed to load update info:', error);
+    }
+  }
+
+  async function fetchLiveSchemeUpdates() {
+    setLiveUpdating(true);
+    setNewSchemesFromUpdate([]);
+    
+    try {
+      const updatePrompt = `You are a government schemes expert. Search your knowledge for the LATEST Indian government schemes announced recently.
+
+Focus on:
+1. New schemes announced by central government in 2024-2025
+2. New state-specific schemes
+3. Recently updated benefits or eligibility criteria
+4. New digital initiatives for citizens
+
+Provide a list of schemes with details. Include only ACTIVE schemes that are accepting applications.
+
+Respond in this EXACT JSON format only (no other text):
+{
+  "update_time": "${new Date().toISOString()}",
+  "source": "Official Government Sources (India)",
+  "new_schemes": [
+    {
+      "name": "Full Official Scheme Name",
+      "url": "official website URL",
+      "description": "Brief description of what the scheme does",
+      "eligibility": "Who can apply for this scheme",
+      "benefits": "What benefits are provided",
+      "how_to_apply": "How to apply (online/offline process)",
+      "department": "Ministry/Department name",
+      "category": "one of: student, farmer, women, housing, health, business, employment, elderly, general"
+    }
+  ],
+  "total_new_schemes": number
+}`;
+
+      let responseText = '';
+      for await (const token of ai.chat([
+        { role: 'system', content: 'You are a government schemes expert with up-to-date knowledge. Always respond with valid JSON only.' },
+        { role: 'user', content: updatePrompt }
+      ])) {
+        responseText += token;
+      }
+
+      // Parse response
+      const jsonMatch = responseText.match(/\{[\s\S]*?\}/);
+      if (jsonMatch) {
+        const data = JSON.parse(jsonMatch[0]);
+        const newSchemes: NewScheme[] = [];
+        
+        if (data.new_schemes && Array.isArray(data.new_schemes)) {
+          for (const scheme of data.new_schemes) {
+            // Check if scheme already exists
+            const existing = await db.query(
+              'SELECT id FROM schemes WHERE LOWER(title) = LOWER($1) LIMIT 1',
+              [scheme.name]
+            );
+            
+            if (existing.ok && existing.rows.length === 0) {
+              // Insert new scheme
+              const cat = scheme.category?.toLowerCase() || 'general';
+              await db.query(
+                `INSERT INTO schemes (title, description, category, official_url, department, source_verified_at, is_active, required_documents, benefit_type)
+                 VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, true, $6, $7)`,
+                [
+                  scheme.name,
+                  `${scheme.description}
+
+Eligibility: ${scheme.eligibility}
+Benefits: ${scheme.benefits}
+How to Apply: ${scheme.how_to_apply}`,
+                  cat,
+                  scheme.url || null,
+                  scheme.department || null,
+                  ['Aadhaar Card', 'Bank Account'],
+                  scheme.benefits ? 'Financial Assistance' : null
+                ]
+              );
+              newSchemes.push(scheme);
+            }
+          }
+        }
+        
+        // Record the update
+        await db.query(
+          `INSERT INTO live_scheme_updates (source_name, last_fetched_at, schemes_found_count, new_schemes_count, status)
+           VALUES ($1, NOW(), $2, $3, $4)`,
+          [data.source || 'Official Sources', data.new_schemes?.length || 0, newSchemes.length, 'success']
+        );
+        
+        setNewSchemesFromUpdate(newSchemes);
+        await loadSchemes();
+        await loadLastUpdateInfo();
+      }
+    } catch (error) {
+      console.error('Live update error:', error);
+      await db.query(
+        `INSERT INTO live_scheme_updates (status, error_message) VALUES ($1, $2)`,
+        ['error', error instanceof Error ? error.message : 'Unknown error']
+      );
+    } finally {
+      setLiveUpdating(false);
+    }
+  }
 
   async function loadSchemes() {
     setLoading(true);
