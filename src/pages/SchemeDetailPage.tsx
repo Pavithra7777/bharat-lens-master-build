@@ -49,26 +49,62 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!schemeId || schemeId.trim() === '') {
+      setError('Invalid scheme ID');
+      setLoading(false);
+      return;
+    }
     loadScheme();
-    // Scroll to top when scheme changes
     window.scrollTo(0, 0);
   }, [schemeId]);
 
   async function loadScheme() {
     setLoading(true);
     setError(null);
+    
+    if (!schemeId || schemeId.trim() === '') {
+      setError('Invalid scheme ID');
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const r = await db.query<Scheme>(
+      // Try UUID comparison first
+      let r = await db.query<Scheme>(
         'SELECT * FROM schemes WHERE id = $1',
         [schemeId]
       );
-      if (r.ok && r.rows.length > 0) {
+      
+      // If no results, try text comparison (handles edge cases)
+      if (r.ok && r.rows && r.rows.length === 0) {
+        r = await db.query<Scheme>(
+          "SELECT * FROM schemes WHERE id::text = $1",
+          [schemeId]
+        );
+      }
+      
+      // If still no results, try ILIKE (for case-insensitive matching)
+      if (r.ok && r.rows && r.rows.length === 0) {
+        r = await db.query<Scheme>(
+          "SELECT * FROM schemes WHERE LOWER(id::text) = LOWER($1)",
+          [schemeId]
+        );
+      }
+      
+      if (!r.ok) {
+        console.error('Database query failed:', r.error);
+        setError('Failed to load scheme. Please try again.');
+        setLoading(false);
+        return;
+      }
+      
+      if (r.rows && r.rows.length > 0) {
         setScheme(r.rows[0] as Scheme);
       } else {
-        setError('Scheme not found in database');
+        setError('Scheme not found. It may have been removed or the link is invalid.');
       }
-    } catch (err) {
-      console.error('Failed to load scheme:', err);
+    } catch (err: any) {
+      console.error('Exception loading scheme:', err);
       setError('Failed to load scheme details. Please try again.');
     } finally {
       setLoading(false);
@@ -77,10 +113,8 @@ export function SchemeDetailPage({ schemeId }: SchemeDetailPageProps) {
 
   function handleApply() {
     if (scheme?.official_url) {
-      // Direct link to official URL
       window.open(scheme.official_url, '_blank', 'noopener,noreferrer');
     } else {
-      // Fallback: search for the scheme on government portals
       const searchQuery = `${scheme?.title || 'government scheme'} India official website apply online`;
       window.open(`https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`, '_blank', 'noopener,noreferrer');
     }
