@@ -74,17 +74,19 @@ interface AISchemeSearchResult {
 // Comprehensive category mapping - UI filters to DB categories/keywords
 const CATEGORY_MAP: Record<string, string[]> = {
   student: ['student', 'education', 'scholarship', 'school', 'college', 'university'],
-  farmer: ['farmer', 'agriculture', 'kisan', 'krishi', 'crop', 'land'],
+  farmer: ['farmer', 'agriculture', 'kisan', 'krishi', 'crop', 'land', 'farming'],
   women: ['women', 'mother', 'child', 'widow', 'pregnant', 'girl', 'beti', 'stree'],
-  housing: ['housing', 'home', 'shelter', 'gratuity', 'house', 'bhavan'],
-  health: ['health', 'medical', 'insurance', 'ayush', 'hospital', 'disease'],
-  business: ['business', 'entrepreneur', 'mudra', 'startup', 'enterprise', 'udyami'],
+  housing: ['housing', 'home', 'shelter', 'gratuity', 'house', 'bhavan', 'awas'],
+  health: ['health', 'medical', 'insurance', 'ayush', 'hospital', 'disease', 'swasthya'],
+  business: ['business', 'entrepreneur', 'mudra', 'startup', 'enterprise', 'udyami', 'udyog'],
   employment: ['employment', 'job', 'skill', 'training', 'work', 'rozgar', 'naukri'],
   elderly: ['elderly', 'senior', 'pension', 'old', 'vridha', 'retired'],
+  general: ['general', 'citizen', 'all', 'common', 'everyone', 'service', 'infra'],
 };
 
 const CATEGORIES = [
   { id: 'all', label: 'All', icon: Sparkles },
+  { id: 'general', label: 'General', icon: Globe },
   { id: 'student', label: 'Students', icon: GraduationCap },
   { id: 'farmer', label: 'Farmers', icon: Home },
   { id: 'women', label: 'Women', icon: Heart },
@@ -132,117 +134,12 @@ export function SchemesPage() {
     }
   }
 
-  async function fetchLiveSchemeUpdates() {
-    setLiveUpdating(true);
-    setNewSchemesFromUpdate([]);
-    
-    try {
-      const updatePrompt = `You are a government schemes expert. Search your knowledge for the LATEST Indian government schemes announced recently.
-
-Focus on:
-1. New schemes announced by central government in 2024-2025
-2. New state-specific schemes
-3. Recently updated benefits or eligibility criteria
-4. New digital initiatives for citizens
-
-Provide a list of schemes with details. Include only ACTIVE schemes that are accepting applications.
-
-Respond in this EXACT JSON format only (no other text):
-{
-  "update_time": "${new Date().toISOString()}",
-  "source": "Official Government Sources (India)",
-  "new_schemes": [
-    {
-      "name": "Full Official Scheme Name",
-      "url": "official website URL",
-      "description": "Brief description of what the scheme does",
-      "eligibility": "Who can apply for this scheme",
-      "benefits": "What benefits are provided",
-      "how_to_apply": "How to apply (online/offline process)",
-      "department": "Ministry/Department name",
-      "category": "one of: student, farmer, women, housing, health, business, employment, elderly, general"
-    }
-  ],
-  "total_new_schemes": number
-}`;
-
-      let responseText = '';
-      for await (const token of ai.chat([
-        { role: 'system', content: 'You are a government schemes expert with up-to-date knowledge. Always respond with valid JSON only.' },
-        { role: 'user', content: updatePrompt }
-      ])) {
-        responseText += token;
-      }
-
-      // Parse response
-      const jsonMatch = responseText.match(/\{[\s\S]*?\}/);
-      if (jsonMatch) {
-        const data = JSON.parse(jsonMatch[0]);
-        const newSchemes: NewScheme[] = [];
-        
-        if (data.new_schemes && Array.isArray(data.new_schemes)) {
-          for (const scheme of data.new_schemes) {
-            // Check if scheme already exists
-            const existing = await db.query(
-              'SELECT id FROM schemes WHERE LOWER(title) = LOWER($1) LIMIT 1',
-              [scheme.name]
-            );
-            
-            if (existing.ok && existing.rows.length === 0) {
-              // Insert new scheme
-              const cat = scheme.category?.toLowerCase() || 'general';
-              await db.query(
-                `INSERT INTO schemes (title, description, category, official_url, department, source_verified_at, is_active, required_documents, benefit_type)
-                 VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, true, $6, $7)`,
-                [
-                  scheme.name,
-                  `${scheme.description}
-
-Eligibility: ${scheme.eligibility}
-Benefits: ${scheme.benefits}
-How to Apply: ${scheme.how_to_apply}`,
-                  cat,
-                  scheme.url || null,
-                  scheme.department || null,
-                  ['Aadhaar Card', 'Bank Account'],
-                  scheme.benefits ? 'Financial Assistance' : null
-                ]
-              );
-              newSchemes.push(scheme);
-            }
-          }
-        }
-        
-        // Record the update
-        await db.query(
-          `INSERT INTO live_scheme_updates (source_name, last_fetched_at, schemes_found_count, new_schemes_count, status)
-           VALUES ($1, NOW(), $2, $3, $4)`,
-          [data.source || 'Official Sources', data.new_schemes?.length || 0, newSchemes.length, 'success']
-        );
-        
-        setNewSchemesFromUpdate(newSchemes);
-        await loadSchemes();
-        await loadLastUpdateInfo();
-      }
-    } catch (error) {
-      console.error('Live update error:', error);
-      await db.query(
-        `INSERT INTO live_scheme_updates (status, error_message) VALUES ($1, $2)`,
-        ['error', error instanceof Error ? error.message : 'Unknown error']
-      );
-    } finally {
-      setLiveUpdating(false);
-    }
-  }
-
   async function loadSchemes() {
     setLoading(true);
     try {
-      const r = await db.query<Scheme>(
-        'SELECT * FROM schemes WHERE is_active = true ORDER BY source_verified_at DESC'
-      );
+      const r = await db.query<Scheme>('SELECT * FROM schemes WHERE is_active IS NOT FALSE ORDER BY created_at DESC');
       if (r.ok) {
-        setSchemes(r.rows);
+        setSchemes(r.rows as Scheme[]);
       }
     } catch (error) {
       console.error('Failed to load schemes:', error);
@@ -251,120 +148,52 @@ How to Apply: ${scheme.how_to_apply}`,
     }
   }
 
-  async function searchSchemesWithAI(query: string) {
-    if (!query.trim()) return;
-    
-    setAiSearching(true);
-    setAiError(null);
-    setAiResults([]);
-    
+  async function fetchLiveSchemeUpdates() {
+    setLiveUpdating(true);
     try {
-      const userProfile = profile ? `
-        User Profile:
-        - Name: ${profile.full_name || 'Not set'}
-        - State: ${profile.state || 'Not set'}
-        - District: ${profile.district || 'Not set'}
-        - Occupation: ${profile.occupation_category || 'Not set'}
-      ` : 'No profile information available';
-      
-      const systemPrompt = `You are a government schemes expert for India. Based on the user's query and profile, find relevant Indian government schemes from official sources (like pmkisan.gov.in, pmjay.gov.in, scholarships.gov.in, mudra.org.in, etc.).
-
-Return ONLY a valid JSON array with no other text. Up to 5 schemes with this exact format:
-[{
-  "title": "Scheme Name",
-  "description": "Brief description of the scheme",
-  "eligibility": ["eligibility criterion 1", "eligibility criterion 2"],
-  "documents": ["required document 1", "required document 2"],
-  "url": "official website URL",
-  "department": "Department name",
-  "category": "primary category (farmer, student, women, housing, health, business, employment, elderly)"
-}]
-
-Only include schemes that are:
-1. Actually from Indian government sources
-2. Currently active/applicable
-3. Relevant to the user's query and profile
-
-If no specific schemes match, return an empty array [].`;
-
       const messages: ChatMessage[] = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `User Query: ${query}\n${userProfile}\n\nFind relevant government schemes for this person.` }
+        { role: 'system', content: `You are a government scheme researcher for India. Search for any NEW government schemes launched or updated in the last 6 months (2024-2025). Focus on: central government schemes, state-specific schemes, and employment/generation programs. Return a JSON array with this exact format:
+[{"name": "Scheme Name", "url": "official URL or N/A", "description": "Brief description", "eligibility": "Who can apply", "benefits": "What you get", "how_to_apply": "Application process", "department": "Ministry/Department", "category": "student/farmer/women/health/housing/business/employment/elderly/general"}] 
+Return 5-10 most important new schemes. If no new schemes found, return an empty array. Only return valid JSON array, no markdown or explanation.` },
+        { role: 'user', content: 'Find the latest government schemes announced or updated in 2024-2025 in India, especially any new employment, farmer support, women welfare, or education schemes. List them in the specified JSON format.' }
       ];
 
-      let responseText = '';
+      let response = '';
       for await (const token of ai.chat(messages)) {
-        responseText += token;
+        response += token;
       }
-      
+
+      // Parse the AI response
       try {
-        const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (Array.isArray(parsed)) {
-            setAiResults(parsed);
-          }
-        } else {
-          const parsed = JSON.parse(responseText);
-          if (Array.isArray(parsed)) {
-            setAiResults(parsed);
-          }
+        const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const schemes = JSON.parse(cleaned);
+        
+        if (Array.isArray(schemes) && schemes.length > 0) {
+          await db.query(
+            'INSERT INTO live_scheme_updates (status, schemes_found_count, new_schemes_count, source_name) VALUES ($1, $2, $3, $4)',
+            ['success', schemes.length, schemes.length, 'AI Research']
+          );
+          setNewSchemesFromUpdate(schemes);
+          setLastLiveUpdate({
+            id: '',
+            last_fetched_at: new Date().toISOString(),
+            schemes_found_count: schemes.length,
+            new_schemes_count: schemes.length,
+            status: 'success',
+            source_name: 'AI Research'
+          });
         }
-      } catch (parseError) {
-        console.error('Failed to parse AI response:', parseError);
-        setAiError('Could not understand the AI response. Please try again.');
+      } catch (e) {
+        console.error('Failed to parse AI response:', e);
+        await db.query(
+          'INSERT INTO live_scheme_updates (status, schemes_found_count, source_name) VALUES ($1, $2, $3)',
+          ['failed', 0, 'AI Research']
+        );
       }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-      console.error('AI search failed:', errorMessage);
-      setAiError(errorMessage);
-    } finally {
-      setAiSearching(false);
-    }
-  }
-
-  async function addSchemeToDatabase(scheme: AISchemeSearchResult) {
-    setAddingScheme(scheme.title);
-    
-    try {
-      const cat = scheme.category?.toLowerCase() || '';
-      let professions: string[] = [];
-      let categoryEligible: string[] = [];
-      
-      if (cat.includes('farmer') || scheme.eligibility.some(e => e.toLowerCase().includes('farmer'))) {
-        professions = ['farmer'];
-      } else if (cat.includes('student') || scheme.eligibility.some(e => e.toLowerCase().includes('student'))) {
-        professions = ['student'];
-      } else if (cat.includes('entrepreneur') || cat.includes('business')) {
-        professions = ['entrepreneur'];
-      }
-      
-      if (cat.includes('women')) categoryEligible.push('women');
-      if (cat.includes('sc') || cat.includes('st')) categoryEligible.push('sc_st');
-      if (cat.includes('minority')) categoryEligible.push('minority');
-
-      await db.query(
-        `INSERT INTO schemes (title, description, category, professions, category_eligible, required_documents, applicable_states, official_url, department, source_verified_at, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, true)`,
-        [
-          scheme.title,
-          scheme.description,
-          cat,
-          professions,
-          categoryEligible,
-          scheme.documents,
-          ['All India'],
-          scheme.url,
-          scheme.department,
-        ]
-      );
-      
-      await loadSchemes();
-      setAiResults(prev => prev.filter(r => r.title !== scheme.title));
     } catch (error) {
-      console.error('Failed to add scheme:', error);
+      console.error('Failed to fetch live updates:', error);
     } finally {
-      setAddingScheme(null);
+      setLiveUpdating(false);
     }
   }
 
@@ -380,7 +209,8 @@ If no specific schemes match, return an empty array [].`;
     const schemeProfessions = ((scheme as Scheme).professions || []).map((p: string) => p.toLowerCase());
     const schemeTitle = (scheme as Scheme).title?.toLowerCase() || (scheme as AISchemeSearchResult).title?.toLowerCase() || '';
     const schemeDesc = (scheme as AISchemeSearchResult).description?.toLowerCase() || '';
-    const schemeText = [schemeCategory, ...schemeProfessions, schemeTitle, schemeDesc].join(' ');
+    const schemeTags = ((scheme as Scheme).tags || []).map((t: string) => t.toLowerCase());
+    const schemeText = [schemeCategory, ...schemeProfessions, schemeTitle, schemeDesc, ...schemeTags].join(' ');
     
     // Check if ANY keyword appears in the scheme text (partial match)
     return keywords.some(k => schemeText.includes(k));
@@ -500,210 +330,227 @@ If no specific schemes match, return an empty array [].`;
             className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
           >
             {liveUpdating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Fetching...
+              </>
             ) : (
-              <RefreshCw className="w-4 h-4" />
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </>
             )}
-            {liveUpdating ? 'Updating...' : 'Check Updates'}
           </button>
         </div>
       </div>
+
+      {/* New Schemes from Live Update */}
+      {newSchemesFromUpdate.length > 0 && (
+        <div className="px-6 py-4 bg-blue-50 border-b border-blue-100">
+          <h3 className="text-sm font-semibold text-blue-800 mb-3">New Schemes Discovered</h3>
+          <div className="space-y-2">
+            {newSchemesFromUpdate.slice(0, 5).map((scheme, idx) => (
+              <div key={idx} className="bg-white rounded-lg p-3 shadow-sm">
+                <p className="font-medium text-gray-900">{scheme.name}</p>
+                <p className="text-xs text-gray-500 mt-1">{scheme.description}</p>
+                {scheme.url && scheme.url !== 'N/A' && (
+                  <a href={scheme.url} target="_blank" rel="noopener noreferrer" 
+                     className="text-xs text-blue-600 hover:underline mt-1 inline-block">
+                    Learn more →
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search Bar */}
-      <div className="px-6 py-4 bg-white border-b border-gray-100">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search schemes..."
-              className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-[#1B3A6B]/20"
-            />
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`w-12 h-12 rounded-xl flex items-center justify-center transition ${
-              showFilters ? 'bg-[#1B3A6B] text-white' : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            <SlidersHorizontal className="w-5 h-5" />
-          </button>
+      <div className="px-6 py-4 bg-white border-b border-gray-200">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search schemes..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-xl border-0 focus:ring-2 focus:ring-[#1B3A6B] focus:bg-white transition"
+          />
+        </div>
+        
+        {/* Category Pills */}
+        <div className="flex gap-2 mt-4 overflow-x-auto pb-2 scrollbar-hide">
+          {CATEGORIES.map(cat => {
+            const Icon = cat.icon;
+            const count = categoryCounts[cat.id] || 0;
+            const isSelected = selectedCategories.includes(cat.id);
+            
+            return (
+              <button
+                key={cat.id}
+                onClick={() => {
+                  if (cat.id === 'all') {
+                    setSelectedCategories(['all']);
+                  } else {
+                    const newCats = selectedCategories.filter(c => c !== 'all');
+                    if (isSelected) {
+                      setSelectedCategories(newCats.filter(c => c !== cat.id));
+                    } else {
+                      setSelectedCategories([...newCats, cat.id]);
+                    }
+                    if (selectedCategories.length === 0 && !isSelected) {
+                      setSelectedCategories([cat.id]);
+                    }
+                  }
+                }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${
+                  isSelected
+                    ? 'bg-[#1B3A6B] text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {cat.label}
+                <span className={`px-2 py-0.5 rounded-full text-xs ${
+                  isSelected ? 'bg-white/20' : 'bg-gray-200'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Category Filters */}
-      {showFilters && (
-        <div className="px-6 py-4 bg-white border-b border-gray-100">
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((cat) => {
-              const Icon = cat.icon;
-              const count = categoryCounts[cat.id] || 0;
-              const isSelected = selectedCategories.includes(cat.id);
-              
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    if (cat.id === 'all') {
-                      setSelectedCategories(['all']);
-                    } else {
-                      const newCats = selectedCategories.filter(c => c !== 'all');
-                      if (newCats.includes(cat.id)) {
-                        setSelectedCategories(newCats.filter(c => c !== cat.id));
-                      } else {
-                        setSelectedCategories([...newCats, cat.id]);
-                      }
-                      if (newCats.length === 0 && cat.id !== 'all') {
-                        setSelectedCategories([cat.id]);
-                      }
-                    }
-                  }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition ${
-                    isSelected
-                      ? 'bg-[#1B3A6B] text-white'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {cat.label}
-                  <span className={`text-xs ${isSelected ? 'text-white/70' : 'text-gray-400'}`}>
-                    ({count})
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Category Pills (collapsed view) */}
-      {!showFilters && (
-        <div className="px-6 py-3 bg-white border-b border-gray-100 overflow-x-auto">
-          <div className="flex gap-2 min-w-max">
-            {CATEGORIES.map((cat) => {
-              const count = categoryCounts[cat.id] || 0;
-              const isSelected = selectedCategories.includes(cat.id);
-              
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => {
-                    if (cat.id === 'all') {
-                      setSelectedCategories(['all']);
-                    } else {
-                      const newCats = selectedCategories.filter(c => c !== 'all');
-                      if (newCats.includes(cat.id)) {
-                        setSelectedCategories(newCats.filter(c => c !== cat.id));
-                      } else {
-                        setSelectedCategories([...newCats, cat.id]);
-                      }
-                      if (newCats.length === 0 && cat.id !== 'all') {
-                        setSelectedCategories([cat.id]);
-                      }
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
-                    isSelected
-                      ? 'bg-[#1B3A6B] text-white'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {cat.label} ({count})
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Scheme Count */}
-      <div className="px-6 py-3 bg-white">
-        <p className="text-sm text-gray-500">
-          Showing {displayedSchemes.length} scheme{displayedSchemes.length !== 1 ? 's' : ''}
-          {tab === 'for-you' && profile && ' based on your profile'}
+      {/* Results */}
+      <div className="px-6 py-4">
+        <p className="text-sm text-gray-600 mb-4">
+          {displayedSchemes.length} scheme{displayedSchemes.length !== 1 ? 's' : ''} found
         </p>
-      </div>
-
-      {/* Schemes List */}
-      <div className="px-6 py-4 space-y-4">
+        
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-[#1B3A6B] animate-spin" />
+            <Loader2 className="w-8 h-8 animate-spin text-[#1B3A6B]" />
           </div>
         ) : displayedSchemes.length === 0 ? (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Search className="w-8 h-8 text-gray-400" />
             </div>
-            <h3 className="font-medium text-gray-600 mb-2">No schemes found</h3>
-            <p className="text-sm text-gray-400">Try adjusting your filters or search query</p>
+            <p className="text-gray-600">No schemes found matching your criteria</p>
+            <button 
+              onClick={() => { setSearch(''); setSelectedCategories(['all']); }}
+              className="mt-4 text-[#1B3A6B] font-medium"
+            >
+              Clear filters
+            </button>
           </div>
         ) : (
-          displayedSchemes.map((scheme) => (
-            <button
-              key={scheme.id}
-              onClick={() => setSelectedScheme(scheme)}
-              className="w-full bg-white rounded-2xl p-4 shadow-sm border border-gray-100 text-left hover:shadow-md transition"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] text-xs rounded-full capitalize">
-                      {scheme.category}
-                    </span>
-                    {scheme.benefit_amount_text && (
-                      <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
-                        {scheme.benefit_amount_text}
-                      </span>
+          <div className="space-y-3">
+            {displayedSchemes.map(scheme => (
+              <Link key={scheme.id} to={`/schemes/${scheme.id}`}>
+                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                          {scheme.category}
+                        </span>
+                        {scheme.benefit_type && (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                            {scheme.benefit_type}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-semibold text-gray-900 mb-1">{scheme.title}</h3>
+                      <p className="text-sm text-gray-600 line-clamp-2">{scheme.description}</p>
+                      {scheme.short_benefit && (
+                        <p className="text-sm text-green-700 font-medium mt-2">
+                          ✓ {scheme.short_benefit}
+                        </p>
+                      )}
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0 ml-4" />
+                  </div>
+                  
+                  <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+                    {scheme.department && (
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <Briefcase className="w-3 h-3" />
+                        {scheme.department}
+                      </div>
+                    )}
+                    {scheme.coverage && (
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <MapPin className="w-3 h-3" />
+                        {scheme.coverage}
+                      </div>
                     )}
                   </div>
-                  <h3 className="font-semibold text-gray-900 mb-1">{scheme.title}</h3>
-                  <p className="text-sm text-gray-500 line-clamp-2">{scheme.description}</p>
-                  {scheme.required_documents && scheme.required_documents.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      Docs: {scheme.required_documents.slice(0, 3).join(', ')}
-                      {scheme.required_documents.length > 3 && ` +${scheme.required_documents.length - 3} more`}
-                    </p>
-                  )}
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400 ml-2" />
-              </div>
-            </button>
-          ))
+              </Link>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* AI Search Panel */}
+      {/* AI Scheme Finder Panel */}
       {showAiPanel && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
-          <div className="bg-white w-full rounded-t-3xl max-h-[80vh] overflow-y-auto animate-slide-up">
-            <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">AI Scheme Finder</h2>
-                <button
-                  onClick={() => setShowAiPanel(false)}
-                  className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="relative">
-                <Brain className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#1B3A6B]" />
-                <input
-                  type="text"
-                  value={aiSearchQuery}
-                  onChange={(e) => setAiSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && searchSchemesWithAI(aiSearchQuery)}
-                  placeholder="Describe what you're looking for..."
-                  className="w-full pl-12 pr-4 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-[#1B3A6B]/20"
-                />
-              </div>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
+          <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-hidden">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900">AI Scheme Finder</h2>
               <button
-                onClick={() => searchSchemesWithAI(aiSearchQuery)}
+                onClick={() => setShowAiPanel(false)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-sm text-gray-600 mb-4">
+                Describe your profile or needs and I'll find the most relevant government schemes for you.
+              </p>
+              
+              <textarea
+                value={aiSearchQuery}
+                onChange={(e) => setAiSearchQuery(e.target.value)}
+                placeholder="e.g., I'm a pregnant woman in Bihar looking for financial assistance..."
+                className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent resize-none"
+                rows={4}
+              />
+              
+              {aiError && (
+                <div className="mt-3 p-3 bg-red-50 rounded-lg text-sm text-red-700">
+                  {aiError}
+                </div>
+              )}
+              
+              {aiResults.length > 0 && (
+                <div className="mt-4 space-y-3">
+                  <h3 className="font-semibold text-gray-900">Found {aiResults.length} matching schemes:</h3>
+                  {aiResults.map((result, idx) => (
+                    <div key={idx} className="p-3 bg-blue-50 rounded-lg">
+                      <h4 className="font-medium text-gray-900">{result.title}</h4>
+                      <p className="text-sm text-gray-600 mt-1">{result.description}</p>
+                      {result.url && (
+                        <a href={result.url} target="_blank" rel="noopener noreferrer" 
+                           className="text-sm text-blue-600 hover:underline mt-2 inline-block">
+                          Learn more →
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 border-t border-gray-200">
+              <button
+                onClick={searchWithAI}
                 disabled={aiSearching || !aiSearchQuery.trim()}
-                className="w-full mt-3 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full py-3 bg-[#1B3A6B] text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {aiSearching ? (
                   <>
@@ -712,325 +559,71 @@ If no specific schemes match, return an empty array [].`;
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-5 h-5" />
+                    <Brain className="w-5 h-5" />
                     Find Schemes with AI
                   </>
                 )}
               </button>
-            </div>
-
-            {aiSearching && (
-              <div className="px-6 py-8 text-center">
-                <div className="w-12 h-12 bg-[#1B3A6B]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Loader2 className="w-6 h-6 text-[#1B3A6B] animate-spin" />
-                </div>
-                <p className="text-gray-700 font-medium mb-1">Searching official government sources</p>
-                <div className="flex items-center justify-center gap-1 mt-2">
-                  <span className="w-2 h-2 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'0ms'}} />
-                  <span className="w-2 h-2 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'150ms'}} />
-                  <span className="w-2 h-2 bg-[#1B3A6B] rounded-full animate-bounce" style={{animationDelay:'300ms'}} />
-                </div>
-                <p className="text-xs text-gray-400 mt-3">This may take up to 2-3 minutes</p>
-              </div>
-            )}
-
-            {!aiSearching && aiError && (
-              <div className="px-6 py-6 text-center">
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Shield className="w-6 h-6 text-red-600" />
-                </div>
-                <p className="text-red-600 font-medium mb-1">Something went wrong</p>
-                <p className="text-sm text-gray-500 mb-4">{aiError}</p>
-                <button
-                  onClick={() => searchSchemesWithAI(aiSearchQuery)}
-                  className="px-6 py-2 bg-[#1B3A6B] text-white rounded-lg text-sm font-medium"
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-
-            {aiResults.length > 0 && (
-              <div className="px-6 py-4 space-y-4">
-                <p className="text-sm text-gray-500">{aiResults.length} schemes found</p>
-                {aiResults.map((result, idx) => (
-                  <div key={idx} className="bg-gray-50 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] text-xs rounded-full capitalize">
-                        {result.category}
-                      </span>
-                    </div>
-                    <h3 className="font-semibold text-gray-900 mb-1">{result.title}</h3>
-                    <p className="text-sm text-gray-500 mb-3">{result.description}</p>
-                    <div className="text-xs text-gray-400 mb-3">
-                      <p className="font-medium text-gray-500 mb-1">Eligibility:</p>
-                      <ul className="list-disc list-inside">
-                        {result.eligibility.slice(0, 3).map((e, i) => (
-                          <li key={i}>{e}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="flex gap-2">
-                      {result.url && (
-                        <a
-                          href={result.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 py-2 bg-[#1B3A6B] text-white text-center rounded-lg text-sm flex items-center justify-center gap-1"
-                        >
-                          Website
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
-                      <button
-                        onClick={() => addSchemeToDatabase(result)}
-                        disabled={addingScheme === result.title}
-                        className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm flex items-center justify-center gap-1 disabled:opacity-50"
-                      >
-                        {addingScheme === result.title ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Plus className="w-4 h-4" />
-                            Add
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!aiSearching && aiResults.length === 0 && aiSearchQuery && (
-              <div className="px-6 py-8 text-center">
-                <p className="text-gray-500">Click search to find relevant schemes</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Scheme Detail Modal */}
-      {selectedScheme && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
-          <div className="bg-white w-full rounded-t-3xl max-h-[90vh] overflow-y-auto animate-slide-up">
-            <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <button
-                  onClick={() => setSelectedScheme(null)}
-                  className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <div className="flex gap-2">
-                  {selectedScheme.official_url && (
-                    <a
-                      href={selectedScheme.official_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-10 h-10 bg-[#1B3A6B] rounded-full flex items-center justify-center"
-                    >
-                      <ExternalLink className="w-5 h-5 text-white" />
-                    </a>
-                  )}
-                  <button className="w-10 h-10 bg-[#1B3A6B] rounded-full flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-white" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-6 space-y-6">
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="px-3 py-1 bg-[#1B3A6B]/10 text-[#1B3A6B] text-sm rounded-full capitalize">
-                    {selectedScheme.category}
-                  </span>
-                  {selectedScheme.coverage && (
-                    <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full">
-                      {selectedScheme.coverage}
-                    </span>
-                  )}
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900">{selectedScheme.title}</h2>
-              </div>
-
-              <div className="bg-gray-50 rounded-xl p-4">
-                <p className="text-gray-700">{selectedScheme.description}</p>
-              </div>
-
-              {selectedScheme.short_benefit && (
-                <div className="bg-green-50 rounded-xl p-4">
-                  <p className="text-green-800 font-medium">💰 {selectedScheme.short_benefit}</p>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900">Benefits</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {selectedScheme.benefit_type && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500 mb-1">Type</p>
-                      <p className="text-sm font-medium capitalize">{selectedScheme.benefit_type}</p>
-                    </div>
-                  )}
-                  {selectedScheme.benefit_amount_text && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500 mb-1">Amount</p>
-                      <p className="text-sm font-medium">{selectedScheme.benefit_amount_text}</p>
-                    </div>
-                  )}
-                  {selectedScheme.benefit_amount_min && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500 mb-1">Min Amount</p>
-                      <p className="text-sm font-medium">₹{selectedScheme.benefit_amount_min.toLocaleString()}</p>
-                    </div>
-                  )}
-                  {selectedScheme.benefit_amount_max && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500 mb-1">Max Amount</p>
-                      <p className="text-sm font-medium">₹{selectedScheme.benefit_amount_max.toLocaleString()}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900">Eligibility</h3>
-                <div className="space-y-2">
-                  {selectedScheme.gender && (
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Gender: <span className="font-medium capitalize">{selectedScheme.gender}</span></span>
-                    </div>
-                  )}
-                  {selectedScheme.min_age !== undefined && selectedScheme.max_age !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Age: <span className="font-medium">{selectedScheme.min_age} - {selectedScheme.max_age} years</span></span>
-                    </div>
-                  )}
-                  {selectedScheme.income_limit && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Income Limit: <span className="font-medium">₹{selectedScheme.income_limit.toLocaleString()}/year</span></span>
-                    </div>
-                  )}
-                  {selectedScheme.category_eligible && selectedScheme.category_eligible.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Categories: <span className="font-medium capitalize">{selectedScheme.category_eligible.join(', ')}</span></span>
-                    </div>
-                  )}
-                  {selectedScheme.professions && selectedScheme.professions.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Professions: <span className="font-medium capitalize">{selectedScheme.professions.join(', ')}</span></span>
-                    </div>
-                  )}
-                  {selectedScheme.employment_status && selectedScheme.employment_status.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Employment: <span className="font-medium capitalize">{selectedScheme.employment_status.join(', ')}</span></span>
-                    </div>
-                  )}
-                  {selectedScheme.domicile_required && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm">Domicile certificate required</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {selectedScheme.applicable_states && selectedScheme.applicable_states.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-gray-900">Applicable States</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedScheme.applicable_states.map((state, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full">
-                        {state}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {selectedScheme.required_documents && selectedScheme.required_documents.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-gray-900">Required Documents</h3>
-                  <ul className="space-y-2">
-                    {selectedScheme.required_documents.map((doc, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <FileText className="w-4 h-4 text-gray-400 mt-0.5" />
-                        <span className="text-sm">{doc}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {selectedScheme.application_mode && selectedScheme.application_mode.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-gray-900">How to Apply</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedScheme.application_mode.map((mode, idx) => (
-                      <span key={idx} className="px-3 py-1 bg-blue-50 text-blue-700 text-sm rounded-full capitalize">
-                        {mode}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(selectedScheme.department || selectedScheme.ministry) && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-gray-900">Scheme Details</h3>
-                  <div className="space-y-2">
-                    {selectedScheme.department && (
-                      <div className="flex items-center gap-2">
-                        <Briefcase className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">Department: <span className="font-medium">{selectedScheme.department}</span></span>
-                      </div>
-                    )}
-                    {selectedScheme.ministry && (
-                      <div className="flex items-center gap-2">
-                        <Home className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">Ministry: <span className="font-medium">{selectedScheme.ministry}</span></span>
-                      </div>
-                    )}
-                    {selectedScheme.helpline && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">Helpline: <span className="font-medium">{selectedScheme.helpline}</span></span>
-                      </div>
-                    )}
-                    {selectedScheme.source_verified_at && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm">Verified: <span className="font-medium">{new Date(selectedScheme.source_verified_at).toLocaleDateString()}</span></span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {selectedScheme.official_url && (
-                <a
-                  href={selectedScheme.official_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full py-4 bg-[#1B3A6B] text-white text-center rounded-xl font-semibold flex items-center justify-center gap-2"
-                >
-                  Apply Now
-                  <ExternalLink className="w-5 h-5" />
-                </a>
-              )}
             </div>
           </div>
         </div>
       )}
     </div>
   );
+
+  async function searchWithAI() {
+    if (!aiSearchQuery.trim() || aiSearching) return;
+    
+    setAiSearching(true);
+    setAiError(null);
+    setAiResults([]);
+    
+    try {
+      const messages: ChatMessage[] = [
+        { role: 'system', content: `You are a helpful assistant that finds Indian government schemes based on user descriptions. Search from these known schemes and return the most relevant ones in JSON format:
+        
+Known schemes database:
+- PM Kisan Samman Nidhi: For farmers, Rs 6000/year
+- Sukanya Samriddhi Yojana: For girl child education
+- PM Awas Yojana: For housing
+- Ayushman Bharat: Health insurance
+- PM Mudra Yojana: Business loans
+- PM Fasal Bima Yojana: Crop insurance
+- PM Vishwakarma: Artisan support
+- PM Jan Dhan: Banking for all
+- PM Ujjwala: Free gas connection
+- PM Awas Gramin: Rural housing
+- Startup India: Business support
+- Stand Up India: SC/ST/Women entrepreneurship
+- Beti Bachao Beti Padhao: Girl child welfare
+- PM Matru Vandana: Maternity benefit
+- Soil Health Card: Farmer support
+- Kisan Credit Card: Farm credit
+
+Return a JSON array of best matching schemes (max 5) with this format:
+[{"title": "Scheme Name", "description": "Brief description", "eligibility": ["eligibility criteria"], "documents": ["required documents"], "url": "official URL or N/A", "department": "Department", "category": "student/farmer/women/health/housing/business/employment/elderly/general"}]
+
+Only return valid JSON, no markdown or explanation.` },
+        { role: 'user', content: aiSearchQuery }
+      ];
+
+      let response = '';
+      for await (const token of ai.chat(messages)) {
+        response += token;
+      }
+
+      // Parse response
+      try {
+        const cleaned = response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const results = JSON.parse(cleaned);
+        setAiResults(Array.isArray(results) ? results : []);
+      } catch (e) {
+        setAiError('Failed to parse AI response. Please try again.');
+      }
+    } catch (error) {
+      setAiError('Failed to search. Please check your connection and try again.');
+    } finally {
+      setAiSearching(false);
+    }
+  }
 }
