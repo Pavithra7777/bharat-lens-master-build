@@ -4,7 +4,7 @@ import { useApp } from '../lib/AppContext';
 import { t } from '../lib/i18n';
 import { Upload, FileText, Check, X, Loader2, Save, AlertTriangle, Globe, ExternalLink, RefreshCw, CheckCircle, AlertCircle, FileSearch, SearchCheck, ShieldCheck, Image, Sparkles, Zap, ArrowRight, FileCheck, BadgeCheck, Search } from 'lucide-react';
 import type { Language } from '../lib/i18n';
-import { doable } from '@doable/sdk';
+import { createDoableClient } from '@doable/sdk';
 import { db } from '@doable/data';
 
 interface SchemeInfo {
@@ -80,7 +80,7 @@ export function ScanPage() {
       let visionResponse = '';
       
       try {
-        const openaiResult = await doable.integrations.run('openai', 'vision_prompt', {
+        const openaiResult = await createDoableClient().integrations.run('openai', 'vision_prompt', {
           image: `data:image/jpeg;base64,${base64Data}`,
           prompt: `You are Bharat Lens - India's premier government scheme finder. Analyze this image and extract ALL information about government schemes.
 
@@ -223,7 +223,7 @@ IMPORTANT RULES:
       let textAnalysis = '';
       
       try {
-        const openaiResult = await doable.integrations.run('openai', 'vision_prompt', {
+        const openaiResult = await createDoableClient().integrations.run('openai', 'vision_prompt', {
           image: undefined,
           prompt: `Analyze this text for Indian government schemes:
 
