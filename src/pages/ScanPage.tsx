@@ -82,10 +82,8 @@ export function ScanPage() {
       try {
         const openaiResult = await createDoableClient().integrations.run('openai', 'vision_prompt', {
           image: `data:image/jpeg;base64,${base64Data}`,
-          prompt: `Quickly analyze this image for Indian government schemes. Return JSON:
-{"schemes":[{"name":"scheme name","category":"Education/Healthcare/Agriculture/Women/Youth/Others","ministry":"Ministry name","official_url":"gov.in URL","apply_url":"application link","eligibility":"who qualifies","benefits":"what you get","documents":"required docs","how_to_apply":"steps","status":"Active","description":"brief description"}],"document_type":"type of document","extracted_text":"readable text","is_scam":false,"scam_warnings":[],"recommendations":["next steps"]}
-Only include REAL Indian government schemes. Return empty schemes array if none found. Return ONLY valid JSON.`,
-          detail: 'auto'
+          prompt: `Quickly analyze this image for Indian government schemes. Return ONLY valid JSON: {"schemes":[{"name":"name","category":"category","ministry":"ministry","official_url":"url","apply_url":"url","eligibility":"eligibility","benefits":"benefits","documents":"docs","how_to_apply":"steps","status":"Active","description":"desc"}],"document_type":"type","extracted_text":"text","is_scam":false,"scam_warnings":[],"recommendations":[]}`,
+          detail: 'low'
         });
         
         if (openaiResult.success && openaiResult.data) {
@@ -397,7 +395,10 @@ Return ONLY valid JSON.`,
                       <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
                     </div>
                     <p className="font-semibold text-gray-800">Analyzing Image...</p>
-                    <p className="text-sm text-gray-500 mt-1">Detecting schemes & extracting info</p>
+                    <p className="text-sm text-gray-500 mt-1">Processing with AI (optimized for speed)</p>
+                    <div className="w-48 h-1 bg-gray-200 rounded-full mt-3 mx-auto overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                    </div>
                   </div>
                 </div>
               )}
