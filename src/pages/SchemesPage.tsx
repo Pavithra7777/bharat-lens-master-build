@@ -110,7 +110,7 @@ export function SchemesPage() {
   const [tab, setTab] = useState<'for-you' | 'all'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [liveUpdating, setLiveUpdating] = useState(false);
-  const [lastLiveUpdate, setLastLiveUpdate] = useState<LiveUpdateRecord | null>(null);
+  const [lastLiveUpdate, setLastLiveUpdate] = useState<LiveUpdateRecord | undefined>(undefined);
   const [newSchemesFromUpdate, setNewSchemesFromUpdate] = useState<NewScheme[]>([]);
   const { profile } = useApp();
 
@@ -472,6 +472,39 @@ If no specific schemes match, return an empty array [].`;
             }`}
           >
             For You
+          </button>
+        </div>
+      </div>
+
+      {/* Live Scheme Updates Banner */}
+      <div className="px-6 py-3 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+              <Zap className="w-4 h-4 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-green-800">
+                {lastLiveUpdate ? `Live: ${lastLiveUpdate.new_schemes_count || 0} new schemes found` : 'Live Scheme Updates'}
+              </p>
+              {lastLiveUpdate?.last_fetched_at && (
+                <p className="text-xs text-green-600">
+                  Last updated: {new Date(lastLiveUpdate.last_fetched_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={fetchLiveSchemeUpdates}
+            disabled={liveUpdating}
+            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+          >
+            {liveUpdating ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {liveUpdating ? 'Updating...' : 'Check Updates'}
           </button>
         </div>
       </div>
