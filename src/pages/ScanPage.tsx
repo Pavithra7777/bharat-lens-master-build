@@ -67,9 +67,10 @@ Return ONLY valid JSON with this exact format (no other text):
 If NO schemes are found, return: {"schemes_found": [], "summary": "No government schemes detected in this image"}`;
 
         try {
-          const visionResult = await doable.integrations.run('google_gemini', 'generate_content_from_image', {
+          // Use google_gemini_chat with image for vision analysis
+          const visionResult = await doable.integrations.run('google_gemini', 'chat', {
             prompt: visionPrompt,
-            image: imageData,
+            imageUrl: imageData,
             model: 'gemini-1.5-flash'
           });
           
@@ -302,132 +303,165 @@ If NO schemes are found: {"schemes_found": [], "summary": "No government schemes
             )}
 
             {image && (
-              <div className="relative rounded-2xl overflow-hidden bg-white shadow-lg">
-                <img src={image} alt="Uploaded" className="w-full h-64 object-contain bg-gray-100" />
-                <button onClick={() => { setImage(null); setResult(null); setExtractedText(''); }} className="absolute top-3 right-3 w-9 h-9 bg-black/50 rounded-full flex items-center justify-center text-white hover:bg-black/70">
-                  <X className="w-5 h-5" />
+              <div className="relative rounded-2xl overflow-hidden bg-white shadow-sm">
+                <img src={image} alt="Uploaded" className="w-full max-h-64 object-contain" />
+                <button onClick={() => { setImage(null); setResult(null); setError(''); }} className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70">
+                  <X className="w-4 h-4" />
                 </button>
-                {processing && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <div className="bg-white rounded-2xl p-6 text-center max-w-xs">
-                      <Loader2 className="w-12 h-12 text-blue-600 mx-auto mb-3 animate-spin" />
-                      <p className="font-semibold text-gray-800">{stage || 'Analyzing...'}</p>
-                      <p className="text-sm text-gray-500 mt-1">This may take a few seconds</p>
-                    </div>
-                  </div>
-                )}
+              </div>
+            )}
+
+            {processing && (
+              <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
+                <Loader2 className="w-10 h-10 text-[#1B3A6B] mx-auto mb-3 animate-spin" />
+                <p className="font-medium text-gray-800">{stage || 'Processing...'}</p>
+                <p className="text-sm text-gray-500 mt-1">Our AI is analyzing your content</p>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-red-700 text-sm flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <p>{error}</p>
               </div>
             )}
           </>
         ) : (
           <>
-            <textarea value={textInput} onChange={(e) => setTextInput(e.target.value)} placeholder="Paste scheme text, notice, or description..." className="w-full p-4 border rounded-xl resize-none h-40 text-gray-800" />
+            <textarea value={textInput} onChange={(e) => setTextInput(e.target.value)} placeholder="Paste scheme text here..." className="w-full h-40 p-4 border border-gray-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-[#1B3A6B] text-sm" />
             <button onClick={() => textInput.trim() && analyzeWithAI(null, textInput)} disabled={processing || !textInput.trim()} className="w-full py-3 bg-[#1B3A6B] text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-              {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-              Find Schemes
+              {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+              Analyze Text
             </button>
           </>
         )}
 
-        {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500" />
-            <p className="text-red-700 text-sm">{error}</p>
-          </div>
-        )}
-
-        {result && (
+        {result && !processing && (
           <div className="space-y-4">
-            {/* Extracted Text */}
-            {extractedText && (
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <h3 className="font-bold text-gray-700 text-sm mb-2 flex items-center gap-2"><FileCheck className="w-4 h-4" /> Text Extracted from Image:</h3>
-                <p className="text-gray-600 text-sm whitespace-pre-wrap">{extractedText.substring(0, 500)}{extractedText.length > 500 ? '...' : ''}</p>
-              </div>
-            )}
-
-            {/* Status */}
-            <div className={`p-4 rounded-xl ${result.is_scam ? 'bg-red-50 border-2 border-red-300' : 'bg-green-50 border-2 border-green-300'}`}>
-              <div className="flex items-center gap-3">
-                {result.is_scam ? <AlertTriangle className="w-12 h-12 text-red-500" /> : <CheckCircle className="w-12 h-12 text-green-500" />}
-                <div>
-                  <p className="font-bold text-lg">{result.is_scam ? '⚠️ Potential Scam Detected' : '✓ Analysis Complete'}</p>
-                  <p className="text-sm text-gray-600">{result.schemes_found?.length || 0} schemes found</p>
+            <div className="bg-white rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <h3 className="font-semibold text-gray-800">Analysis Complete</h3>
                 </div>
+                {result.is_scam && (
+                  <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-medium rounded-full">⚠️ Potential Scam</span>
+                )}
               </div>
+              <p className="text-sm text-gray-600 leading-relaxed">{result.summary}</p>
+              
+              {result.document_type && result.document_type !== 'error' && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-xs text-gray-500">Document type: <span className="font-medium text-gray-700">{result.document_type}</span></p>
+                </div>
+              )}
             </div>
 
-            {/* Warnings */}
-            {result.scam_warnings?.length > 0 && (
-              <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
-                <h3 className="font-bold text-red-800 mb-2 flex items-center gap-2"><AlertTriangle className="w-5 h-5" /> Warnings</h3>
-                <ul className="space-y-1">{result.scam_warnings.map((w: string, i: number) => <li key={i} className="text-sm text-red-700">• {w}</li>)}</ul>
+            {result.extracted_text && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <FileText className="w-4 h-4" /> Extracted Text
+                </h3>
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">{result.extracted_text}</p>
               </div>
             )}
 
-            {/* Summary */}
-            {result.summary && (
-              <div className="bg-white border-2 border-gray-200 rounded-xl p-4">
-                <h3 className="font-bold text-gray-900 mb-2">📋 Summary</h3>
-                <p className="text-gray-700">{result.summary}</p>
+            {result.scam_warnings && result.scam_warnings.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <h3 className="font-semibold text-amber-800 mb-2 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" /> Scam Warnings
+                </h3>
+                <ul className="text-sm text-amber-700 space-y-1">
+                  {result.scam_warnings.map((warning: string, i: number) => (
+                    <li key={i}>• {warning}</li>
+                  ))}
+                </ul>
               </div>
             )}
 
-            {/* Schemes */}
-            {result.schemes_found?.length > 0 ? (
-              <div className="space-y-4">
-                <h3 className="font-bold text-gray-900 text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-purple-500" /> Schemes Found ({result.schemes_found.length})</h3>
-                
-                {result.schemes_found.map((scheme: any, i: number) => (
-                  <div key={i} className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden">
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <h4 className="font-bold text-gray-900 text-lg">{scheme.name}</h4>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${scheme.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>{scheme.status || 'Active'}</span>
+            {result.schemes_found && result.schemes_found.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#1B3A6B]" /> Schemes Found ({result.schemes_found.length})
+                </h3>
+                {result.schemes_found.map((scheme: any, index: number) => (
+                  <div key={index} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-semibold text-gray-800">{scheme.name}</h4>
+                        {scheme.ministry && <p className="text-xs text-gray-500 mt-0.5">{scheme.ministry}</p>}
                       </div>
-                      {scheme.category && <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium mb-2">{scheme.category}</span>}
-                      {scheme.ministry && <p className="text-sm text-gray-500 mb-2">🏛️ {scheme.ministry}</p>}
-                      {scheme.description && <p className="text-gray-700 text-sm mb-2">{scheme.description}</p>}
-                      {scheme.eligibility && <div className="mb-2"><h5 className="font-semibold text-sm">✅ Eligibility:</h5><p className="text-gray-600 text-sm">{scheme.eligibility}</p></div>}
-                      {scheme.benefits && <div className="mb-2"><h5 className="font-semibold text-sm">🎁 Benefits:</h5><p className="text-gray-600 text-sm">{scheme.benefits}</p></div>}
-                      {scheme.documents_required && <div className="mb-2"><h5 className="font-semibold text-sm">📄 Documents:</h5><p className="text-gray-600 text-sm">{scheme.documents_required}</p></div>}
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full capitalize">{scheme.category}</span>
                     </div>
-                    <div className="bg-gray-50 p-4 border-t border-gray-200">
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        {scheme.apply_url && <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-3 px-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2"><ExternalLink className="w-4 h-4" /> Apply Now</a>}
-                        {scheme.official_url && <a href={scheme.official_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2"><ExternalLink className="w-4 h-4" /> Official Site</a>}
-                        {!scheme.apply_url && !scheme.official_url && <a href="https://www.india.gov.in" target="_blank" rel="noopener noreferrer" className="flex-1 py-3 px-4 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2"><ExternalLink className="w-4 h-4" /> Find on India.gov.in</a>}
+                    
+                    {scheme.description && <p className="text-sm text-gray-600 mt-2">{scheme.description}</p>}
+                    
+                    {scheme.eligibility && (
+                      <div className="mt-3">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Eligibility</p>
+                        <p className="text-sm text-gray-700 mt-0.5">{scheme.eligibility}</p>
                       </div>
+                    )}
+                    
+                    {scheme.benefits && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Benefits</p>
+                        <p className="text-sm text-gray-700 mt-0.5">{scheme.benefits}</p>
+                      </div>
+                    )}
+                    
+                    {scheme.documents_required && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Documents</p>
+                        <p className="text-sm text-gray-700 mt-0.5">{scheme.documents_required}</p>
+                      </div>
+                    )}
+                    
+                    {scheme.how_to_apply && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">How to Apply</p>
+                        <p className="text-sm text-gray-700 mt-0.5">{scheme.how_to_apply}</p>
+                      </div>
+                    )}
+                    
+                    <div className="mt-3 flex gap-2">
+                      {scheme.official_url && (
+                        <a href={scheme.official_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2 px-3 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1 hover:bg-gray-200 transition">
+                          <ExternalLink className="w-3.5 h-3.5" /> Official Site
+                        </a>
+                      )}
+                      {scheme.apply_url && (
+                        <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2 px-3 bg-[#1B3A6B] text-white rounded-lg text-sm font-medium flex items-center justify-center gap-1 hover:bg-[#2A4A8B] transition">
+                          Apply <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
-                <Search className="w-12 h-12 text-yellow-500 mx-auto mb-3" />
-                <h3 className="font-bold text-yellow-800 mb-2">No Schemes Detected</h3>
-                <p className="text-sm text-yellow-700 mb-4">Try a different image or paste text directly</p>
-                <button onClick={() => navigate('/schemes')} className="py-2 px-4 bg-yellow-500 text-white rounded-xl font-medium text-sm hover:bg-yellow-600">Browse Schemes</button>
+            )}
+
+            {result.recommendations && result.recommendations.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+                <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4" /> Tips
+                </h3>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  {result.recommendations.map((tip: string, i: number) => (
+                    <li key={i}>• {tip}</li>
+                  ))}
+                </ul>
               </div>
             )}
 
-            {/* Recommendations */}
-            {result.recommendations?.length > 0 && (
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-                <h3 className="font-bold text-blue-800 mb-2">💡 Tips</h3>
-                <ul className="space-y-1">{result.recommendations.map((r: string, i: number) => <li key={i} className="text-sm text-blue-700 flex items-center gap-2"><CheckCircle className="w-4 h-4" />{r}</li>)}</ul>
-              </div>
+            <button onClick={handleSave} disabled={saving} className="w-full py-3 bg-green-600 text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              {saving ? 'Saving...' : 'Save to Vault'}
+            </button>
+            
+            {saveSuccess && (
+              <p className="text-center text-green-600 font-medium text-sm">{saveSuccess}</p>
             )}
-
-            <div className="flex gap-3">
-              <button onClick={handleSave} disabled={saving} className="flex-1 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50">
-                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : saveSuccess ? <CheckCircle className="w-5 h-5" /> : <Save className="w-5 h-5" />}
-                {saveSuccess || 'Save to Vault'}
-              </button>
-              <button onClick={() => navigate('/chat')} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium flex items-center justify-center gap-2">
-                <MessageCircle className="w-5 h-5" /> Chat
-              </button>
-            </div>
           </div>
         )}
       </div>
