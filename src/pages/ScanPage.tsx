@@ -44,42 +44,44 @@ export function ScanPage() {
     try {
       const doable = createDoableClient();
       
-      // Analyze image with OpenAI Vision
+      // Analyze image with Gemini Vision
       if (imageData) {
-        setStage('Analyzing image with AI vision...');
+        setStage('Analyzing image with AI...');
         
-        const visionPrompt = `You are an expert on Indian government schemes. Look at this image carefully and identify any government schemes mentioned.
+        const visionPrompt = `You are an expert on Indian government schemes. Look at this image and identify any government schemes mentioned.
 
-Common schemes to look for: PM-KISAN, Ujjwala Yojana, Ayushman Bharat, Digital India, Skill India, Stand Up India, Mudra Yojana, Sukanya Samriddhi, PM Awas Yojana, Jan Dhan Yojana, etc.
+Common schemes: PM-KISAN, Ujjwala Yojana, Ayushman Bharat, Digital India, Skill India, Stand Up India, Mudra Yojana, Sukanya Samriddhi, PM Awas Yojana, Jan Dhan Yojana.
 
-Return ONLY valid JSON with this structure:
+Return ONLY this JSON format:
 {
   "is_scam": false,
-  "document_type": "what type of document",
-  "extracted_text": "all text visible in image",
+  "document_type": "document type",
+  "extracted_text": "all text from image",
   "scam_warnings": [],
   "schemes_found": [
     {
-      "name": "Official scheme name",
-      "category": "education|health|housing|employment|agriculture|women|financial|skill|startup|social",
-      "ministry": "Ministry name",
-      "official_url": "https://example.gov.in",
-      "apply_url": "https://example.gov.in/apply",
+      "name": "Scheme Name",
+      "category": "category",
+      "ministry": "Ministry",
+      "official_url": "https://...",
+      "apply_url": "https://...",
       "eligibility": "Who can apply",
-      "benefits": "What benefits",
-      "documents_required": "Documents needed",
-      "how_to_apply": "How to apply",
+      "benefits": "Benefits",
+      "documents_required": "Documents",
+      "how_to_apply": "Steps",
       "status": "Active",
-      "description": "Brief description"
+      "description": "Description"
     }
   ],
   "recommendations": ["tips"]
 }`;
 
         try {
-          const visionResult = await doable.integrations.run('openai', 'vision_prompt', {
-            image: imageData,
-            prompt: visionPrompt
+          // Try Gemini first for vision
+          const visionResult = await doable.integrations.run('google_gemini', 'chat', {
+            prompt: visionPrompt,
+            imageUrl: imageData,
+            model: 'gemini-1.5-flash'
           });
           
           console.log('Vision result:', visionResult);
@@ -96,7 +98,7 @@ Return ONLY valid JSON with this structure:
                 const schemes = parsed.schemes_found || [];
                 const summary = schemes.length > 0 
                   ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''}!` 
-                  : 'No government schemes detected in this image';
+                  : 'No government schemes detected';
                 
                 setResult({
                   is_scam: parsed.is_scam || false,
@@ -112,17 +114,17 @@ Return ONLY valid JSON with this structure:
                 setProcessing(false);
                 return;
               } catch (parseErr) {
-                console.error('JSON parse error:', parseErr);
-                setError('Could not understand AI response');
+                console.error('Parse error:', parseErr);
               }
             }
             
+            // No JSON - show what was found
             setExtractedText(responseText);
             setResult({
               is_scam: false,
               document_type: 'image',
               extracted_text: responseText,
-              summary: 'Analysis complete - see text below',
+              summary: 'Analysis complete',
               scam_warnings: [],
               schemes_found: [],
               recommendations: []
@@ -130,22 +132,22 @@ Return ONLY valid JSON with this structure:
             setProcessing(false);
             return;
           } else {
-            setError(visionResult.error || 'Failed to analyze image');
+            setError(visionResult.error || 'Analysis failed');
           }
         } catch (e: any) {
           console.error('Vision error:', e);
-          setError('Failed to analyze: ' + (e.message || 'try again'));
+          setError('Analysis failed: ' + (e.message || 'try again'));
         }
       }
 
-      // Analyze text input with Gemini
+      // Text analysis with Gemini
       if (textData.trim()) {
         setStage('Finding schemes...');
         
-        const analysisPrompt = `Identify Indian government schemes in this text. Return JSON:
+        const prompt = `Identify Indian government schemes in this text. Return JSON:
 {
   "schemes_found": [{
-    "name": "scheme name",
+    "name": "name",
     "category": "category",
     "ministry": "ministry",
     "official_url": "https://...",
@@ -153,14 +155,15 @@ Return ONLY valid JSON with this structure:
     "eligibility": "who can apply",
     "benefits": "benefits",
     "documents_required": "documents",
-    "how_to_apply": "how to apply",
+    "how_to_apply": "steps",
     "description": "description"
   }]
-}`;
+}
+TEXT: ${textData}`;
 
         try {
           const res = await doable.integrations.run('google_gemini', 'chat', {
-            prompt: analysisPrompt + "\n\nTEXT:\n" + textData,
+            prompt: prompt,
             model: 'gemini-pro'
           });
           
@@ -184,7 +187,7 @@ Return ONLY valid JSON with this structure:
             }
           }
         } catch (e) {
-          console.error('Analysis error:', e);
+          console.error('Text error:', e);
         }
       }
 
@@ -195,12 +198,12 @@ Return ONLY valid JSON with this structure:
         summary: 'Analysis complete',
         scam_warnings: [],
         schemes_found: [],
-        recommendations: ['Browse Schemes page for government benefits']
+        recommendations: ['Browse Schemes page']
       });
       
     } catch (err: any) {
       console.error('Error:', err);
-      setError('Analysis failed: ' + (err.message || 'try again'));
+      setError('Analysis failed');
       setResult({ 
         is_scam: false, 
         document_type: 'error', 
@@ -244,14 +247,12 @@ Return ONLY valid JSON with this structure:
         ? `Scan: ${schemeCount} scheme(s) found`
         : `Scan: Document analyzed`;
       
-      const description = result.summary || 'Analyzed document';
-      
       await db.query(
         `INSERT INTO vault_items (title, description, category, item_type, metadata) 
          VALUES ($1, $2, $3, $4, $5)`,
         [
           title,
-          description,
+          result.summary || 'Analyzed document',
           'scan',
           'scan_result',
           JSON.stringify({
@@ -319,13 +320,12 @@ Return ONLY valid JSON with this structure:
               <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
                 <Loader2 className="w-10 h-10 text-[#1B3A6B] mx-auto mb-3 animate-spin" />
                 <p className="font-medium text-gray-800">{stage || 'Processing...'}</p>
-                <p className="text-sm text-gray-500 mt-1">AI is analyzing your image</p>
+                <p className="text-sm text-gray-500 mt-1">AI is analyzing</p>
               </div>
             )}
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-red-700 text-sm flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-red-700 text-sm">
                 <p>{error}</p>
               </div>
             )}
@@ -349,7 +349,7 @@ Return ONLY valid JSON with this structure:
               </div>
               <div>
                 <h2 className="text-xl font-bold text-white">{result.schemes_found.length} Scheme{result.schemes_found.length > 1 ? 's' : ''} Found!</h2>
-                <p className="text-white/80 text-sm">Tap to see details</p>
+                <p className="text-white/80 text-sm">Tap for details</p>
               </div>
             </div>
           </div>
@@ -470,20 +470,6 @@ Return ONLY valid JSON with this structure:
                 <p className="mt-2 text-xs text-gray-600 bg-gray-50 p-3 rounded-xl whitespace-pre-wrap max-h-40 overflow-auto">{result.extracted_text}</p>
               </details>
             )}
-          </div>
-        )}
-
-        {/* Recommendations */}
-        {result && !processing && result.recommendations?.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-            <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-              <MessageCircle className="w-4 h-4" /> Tips
-            </h3>
-            <ul className="text-sm text-blue-700 space-y-1">
-              {result.recommendations.map((tip: string, i: number) => (
-                <li key={i}>• {tip}</li>
-              ))}
-            </ul>
           </div>
         )}
 
