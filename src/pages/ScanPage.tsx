@@ -77,63 +77,81 @@ Return ONLY this JSON format:
 }`;
 
         try {
-          // Try Gemini first for vision
-          const visionResult = await doable.integrations.run('google_gemini', 'chat', {
-            prompt: visionPrompt,
-            imageUrl: imageData,
-            model: 'gemini-1.5-flash'
+          // Use Groq Vision API (llama-3.2-11b-vision-preview)
+          const groqApiKey = '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';
+
+          const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${groqApiKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: 'llama-3.2-11b-vision-preview',
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: visionPrompt },
+                    { type: 'image_url', image_url: { url: imageData } }
+                  ]
+                }
+              ],
+              temperature: 0.2,
+              max_tokens: 2048
+            })
           });
-          
-          console.log('Vision result:', visionResult);
-          
-          if (visionResult.success && visionResult.data) {
-            const responseText = typeof visionResult.data === 'string' 
-              ? visionResult.data 
-              : JSON.stringify(visionResult.data);
-            
-            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              try {
-                const parsed = JSON.parse(jsonMatch[0]);
-                const schemes = parsed.schemes_found || [];
-                const summary = schemes.length > 0 
-                  ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''}!` 
-                  : 'No government schemes detected';
-                
-                setResult({
-                  is_scam: parsed.is_scam || false,
-                  document_type: parsed.document_type || 'image',
-                  extracted_text: parsed.extracted_text || '',
-                  summary: summary,
-                  scam_warnings: parsed.scam_warnings || [],
-                  schemes_found: schemes,
-                  recommendations: parsed.recommendations || []
-                });
-                
-                setExtractedText(parsed.extracted_text || '');
-                setProcessing(false);
-                return;
-              } catch (parseErr) {
-                console.error('Parse error:', parseErr);
-              }
-            }
-            
-            // No JSON - show what was found
-            setExtractedText(responseText);
-            setResult({
-              is_scam: false,
-              document_type: 'image',
-              extracted_text: responseText,
-              summary: 'Analysis complete',
-              scam_warnings: [],
-              schemes_found: [],
-              recommendations: []
-            });
-            setProcessing(false);
-            return;
-          } else {
-            setError(visionResult.error || 'Analysis failed');
+
+          if (!groqResponse.ok) {
+            const errText = await groqResponse.text();
+            throw new Error(`Groq API error: ${groqResponse.status} - ${errText}`);
           }
+
+          const groqData = await groqResponse.json();
+          const responseText = groqData?.choices?.[0]?.message?.content || '';
+
+          console.log('Groq vision result:', responseText);
+
+          const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[0]);
+              const schemes = parsed.schemes_found || [];
+              const summary = schemes.length > 0
+                ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''}!`
+                : 'No government schemes detected';
+
+              setResult({
+                is_scam: parsed.is_scam || false,
+                document_type: parsed.document_type || 'image',
+                extracted_text: parsed.extracted_text || '',
+                summary: summary,
+                scam_warnings: parsed.scam_warnings || [],
+                schemes_found: schemes,
+                recommendations: parsed.recommendations || []
+              });
+
+              setExtractedText(parsed.extracted_text || '');
+              setProcessing(false);
+              return;
+            } catch (parseErr) {
+              console.error('Parse error:', parseErr);
+            }
+          }
+
+          // No JSON - show what was found
+          setExtractedText(responseText);
+          setResult({
+            is_scam: false,
+            document_type: 'image',
+            extracted_text: responseText,
+            summary: 'Analysis complete',
+            scam_warnings: [],
+            schemes_found: [],
+            recommendations: []
+          });
+          setProcessing(false);
+          return;
         } catch (e: any) {
           console.error('Vision error:', e);
           setError('Analysis failed: ' + (e.message || 'try again'));
