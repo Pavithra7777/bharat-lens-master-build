@@ -1,8 +1,22 @@
 import { useState, useRef } from 'react';
 import { useRouter } from '../lib/Router';
-import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckCircle, AlertCircle, Camera, Sparkles, MessageCircle, Search, FileCheck } from 'lucide-react';
+import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckCircle, AlertCircle, Camera, Sparkles, MessageCircle, Search, FileCheck, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import { createDoableClient } from '@doable/sdk';
 import { db } from '@doable/data';
+
+interface SchemeResult {
+  name: string;
+  category: string;
+  ministry?: string;
+  official_url?: string;
+  apply_url?: string;
+  eligibility?: string;
+  benefits?: string;
+  documents_required?: string;
+  how_to_apply?: string;
+  status?: string;
+  description?: string;
+}
 
 export function ScanPage() {
   const [image, setImage] = useState<string | null>(null);
@@ -15,6 +29,7 @@ export function ScanPage() {
   const [textInput, setTextInput] = useState('');
   const [mode, setMode] = useState<'image' | 'text'>('image');
   const [stage, setStage] = useState('');
+  const [expandedScheme, setExpandedScheme] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { navigate } = useRouter();
 
@@ -23,6 +38,7 @@ export function ScanPage() {
     setError('');
     setResult(null);
     setExtractedText('');
+    setExpandedScheme(null);
     setStage('Reading your content...');
 
     try {
@@ -36,9 +52,11 @@ export function ScanPage() {
 
 TASK:
 1. Read ALL text visible in this image
-2. Identify any government schemes mentioned
+2. Identify any government schemes mentioned - look for names like PM-KISAN, Ujjwala, Ayushman, Digital India, Skill India, etc.
 3. Check if it looks like a scam or fraud
 4. Provide complete details about any schemes found
+
+IMPORTANT: Be very thorough. Even if the scheme name is partial or mentioned briefly, try to identify it.
 
 Return ONLY valid JSON with this exact format (no other text):
 {
@@ -272,6 +290,10 @@ If NO schemes are found: {"schemes_found": [], "summary": "No government schemes
     }
   }
 
+  const toggleScheme = (index: number) => {
+    setExpandedScheme(expandedScheme === index ? null : index);
+  };
+
   return (
     <div className="min-h-screen bg-[#FAFBFC]">
       <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-4 pt-12 pb-4">
@@ -336,133 +358,177 @@ If NO schemes are found: {"schemes_found": [], "summary": "No government schemes
           </>
         )}
 
-        {result && !processing && (
+        {/* SCHEMES FOUND - MAIN DISPLAY */}
+        {result && !processing && result.schemes_found && result.schemes_found.length > 0 && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <h3 className="font-semibold text-gray-800">Analysis Complete</h3>
+            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-5 shadow-lg">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <Sparkles className="w-6 h-6 text-white" />
                 </div>
-                {result.is_scam && (
-                  <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-medium rounded-full">⚠️ Potential Scam</span>
-                )}
+                <div>
+                  <h2 className="text-xl font-bold text-white">{result.schemes_found.length} Scheme{result.schemes_found.length > 1 ? 's' : ''} Found!</h2>
+                  <p className="text-white/80 text-sm">Tap each scheme to see details</p>
+                </div>
               </div>
-              <p className="text-sm text-gray-600 leading-relaxed">{result.summary}</p>
-              
-              {result.document_type && result.document_type !== 'error' && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <p className="text-xs text-gray-500">Document type: <span className="font-medium text-gray-700">{result.document_type}</span></p>
-                </div>
-              )}
             </div>
 
-            {result.extracted_text && (
-              <div className="bg-white rounded-2xl p-5 shadow-sm">
-                <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                  <FileText className="w-4 h-4" /> Extracted Text
+            {/* Scam Warning */}
+            {result.is_scam && (
+              <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4">
+                <h3 className="font-bold text-red-800 flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-5 h-5" /> Warning - Potential Scam!
                 </h3>
-                <p className="text-sm text-gray-600 whitespace-pre-wrap">{result.extracted_text}</p>
-              </div>
-            )}
-
-            {result.scam_warnings && result.scam_warnings.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                <h3 className="font-semibold text-amber-800 mb-2 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4" /> Scam Warnings
-                </h3>
-                <ul className="text-sm text-amber-700 space-y-1">
-                  {result.scam_warnings.map((warning: string, i: number) => (
-                    <li key={i}>• {warning}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {result.schemes_found && result.schemes_found.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#1B3A6B]" /> Schemes Found ({result.schemes_found.length})
-                </h3>
-                {result.schemes_found.map((scheme: any, index: number) => (
-                  <div key={index} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-semibold text-gray-800">{scheme.name}</h4>
-                        {scheme.ministry && <p className="text-xs text-gray-500 mt-0.5">{scheme.ministry}</p>}
-                      </div>
-                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full capitalize">{scheme.category}</span>
-                    </div>
-                    
-                    {scheme.description && <p className="text-sm text-gray-600 mt-2">{scheme.description}</p>}
-                    
-                    {scheme.eligibility && (
-                      <div className="mt-3">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Eligibility</p>
-                        <p className="text-sm text-gray-700 mt-0.5">{scheme.eligibility}</p>
-                      </div>
-                    )}
-                    
-                    {scheme.benefits && (
-                      <div className="mt-2">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Benefits</p>
-                        <p className="text-sm text-gray-700 mt-0.5">{scheme.benefits}</p>
-                      </div>
-                    )}
-                    
-                    {scheme.documents_required && (
-                      <div className="mt-2">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Documents</p>
-                        <p className="text-sm text-gray-700 mt-0.5">{scheme.documents_required}</p>
-                      </div>
-                    )}
-                    
-                    {scheme.how_to_apply && (
-                      <div className="mt-2">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">How to Apply</p>
-                        <p className="text-sm text-gray-700 mt-0.5">{scheme.how_to_apply}</p>
-                      </div>
-                    )}
-                    
-                    <div className="mt-3 flex gap-2">
-                      {scheme.official_url && (
-                        <a href={scheme.official_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2 px-3 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium flex items-center justify-center gap-1 hover:bg-gray-200 transition">
-                          <ExternalLink className="w-3.5 h-3.5" /> Official Site
-                        </a>
-                      )}
-                      {scheme.apply_url && (
-                        <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2 px-3 bg-[#1B3A6B] text-white rounded-lg text-sm font-medium flex items-center justify-center gap-1 hover:bg-[#2A4A8B] transition">
-                          Apply <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
+                {result.scam_warnings?.map((warning: string, i: number) => (
+                  <p key={i} className="text-red-700 text-sm">• {warning}</p>
                 ))}
               </div>
             )}
 
-            {result.recommendations && result.recommendations.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-                <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                  <MessageCircle className="w-4 h-4" /> Tips
-                </h3>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  {result.recommendations.map((tip: string, i: number) => (
-                    <li key={i}>• {tip}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {/* Schemes List - Interactive */}
+            <div className="space-y-3">
+              {result.schemes_found.map((scheme: SchemeResult, index: number) => (
+                <div key={index} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                  {/* Scheme Header - Always Visible */}
+                  <button 
+                    onClick={() => toggleScheme(index)}
+                    className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition"
+                  >
+                    <div className="flex items-center gap-3 flex-1 text-left">
+                      <div className="w-10 h-10 bg-[#1B3A6B]/10 rounded-full flex items-center justify-center shrink-0">
+                        <FileCheck className="w-5 h-5 text-[#1B3A6B]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-gray-800 text-left">{scheme.name}</h4>
+                        {scheme.category && (
+                          <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full capitalize">
+                            {scheme.category}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {expandedScheme === index ? (
+                        <ChevronUp className="w-5 h-5 text-gray-400" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-gray-400" />
+                      )}
+                    </div>
+                  </button>
 
-            <button onClick={handleSave} disabled={saving} className="w-full py-3 bg-green-600 text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-              {saving ? 'Saving...' : 'Save to Vault'}
-            </button>
-            
-            {saveSuccess && (
-              <p className="text-center text-green-600 font-medium text-sm">{saveSuccess}</p>
-            )}
+                  {/* Expanded Details */}
+                  {expandedScheme === index && (
+                    <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
+                      {scheme.description && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">About</p>
+                          <p className="text-sm text-gray-700">{scheme.description}</p>
+                        </div>
+                      )}
+                      
+                      {scheme.ministry && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Ministry</p>
+                          <p className="text-sm text-gray-700">{scheme.ministry}</p>
+                        </div>
+                      )}
+                      
+                      {scheme.eligibility && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Who Can Apply</p>
+                          <p className="text-sm text-gray-700">{scheme.eligibility}</p>
+                        </div>
+                      )}
+                      
+                      {scheme.benefits && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Benefits</p>
+                          <p className="text-sm text-gray-700">{scheme.benefits}</p>
+                        </div>
+                      )}
+                      
+                      {scheme.documents_required && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Documents Needed</p>
+                          <p className="text-sm text-gray-700">{scheme.documents_required}</p>
+                        </div>
+                      )}
+                      
+                      {scheme.how_to_apply && (
+                        <div>
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">How to Apply</p>
+                          <p className="text-sm text-gray-700">{scheme.how_to_apply}</p>
+                        </div>
+                      )}
+                      
+                      <div className="flex gap-2 pt-2">
+                        {scheme.official_url && (
+                          <a href={scheme.official_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2.5 px-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-gray-200 transition">
+                            <ExternalLink className="w-4 h-4" /> Official Site
+                          </a>
+                        )}
+                        {scheme.apply_url && (
+                          <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2.5 px-3 bg-green-600 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-green-700 transition">
+                            Apply Now <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
+        )}
+
+        {/* No schemes found message */}
+        {result && !processing && result.schemes_found?.length === 0 && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="font-semibold text-gray-800 text-lg mb-2">No Schemes Found</h3>
+            <p className="text-sm text-gray-500 mb-4">{result.summary}</p>
+            <p className="text-xs text-gray-400">Try uploading a different image or browse schemes manually</p>
+          </div>
+        )}
+
+        {/* Extracted Text */}
+        {result && !processing && result.extracted_text && (
+          <details className="bg-white rounded-2xl shadow-sm border border-gray-100">
+            <summary className="p-4 cursor-pointer font-medium text-gray-700 flex items-center gap-2 hover:bg-gray-50">
+              <Eye className="w-4 h-4" /> View Extracted Text
+            </summary>
+            <div className="px-4 pb-4">
+              <p className="text-sm text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-xl">{result.extracted_text}</p>
+            </div>
+          </details>
+        )}
+
+        {/* Recommendations */}
+        {result && !processing && result.recommendations?.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+            <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+              <MessageCircle className="w-4 h-4" /> Tips
+            </h3>
+            <ul className="text-sm text-blue-700 space-y-1">
+              {result.recommendations.map((tip: string, i: number) => (
+                <li key={i}>• {tip}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Save Button */}
+        {result && !processing && (
+          <button onClick={handleSave} disabled={saving} className="w-full py-3 bg-green-600 text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+            {saving ? 'Saving...' : 'Save to Vault'}
+          </button>
+        )}
+        
+        {saveSuccess && (
+          <p className="text-center text-green-600 font-medium text-sm">{saveSuccess}</p>
         )}
       </div>
     </div>
