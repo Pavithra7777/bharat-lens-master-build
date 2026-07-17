@@ -77,7 +77,7 @@ Return ONLY this JSON format:
 }`;
 
         try {
-          // Use Groq Vision API (llama-3.2-11b-vision-preview)
+          // Use Groq Vision API (llama-3.2-90b-vision-preview)
           const groqApiKey = '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';
 
           const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -87,7 +87,7 @@ Return ONLY this JSON format:
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              model: 'llama-3.2-11b-vision-preview',
+              model: 'llama-3.2-90b-vision-preview',
               messages: [
                 {
                   role: 'user',
