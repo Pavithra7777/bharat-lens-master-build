@@ -30,6 +30,7 @@ export function ScanPage() {
   const [mode, setMode] = useState<'image' | 'text'>('image');
   const [stage, setStage] = useState('');
   const [expandedScheme, setExpandedScheme] = useState<number | null>(null);
+  const [rawResponse, setRawResponse] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { navigate } = useRouter();
 
@@ -39,63 +40,66 @@ export function ScanPage() {
     setResult(null);
     setExtractedText('');
     setExpandedScheme(null);
+    setRawResponse('');
     setStage('Reading your content...');
 
     try {
       const doable = createDoableClient();
       
-      // STEP 1: Analyze image with Gemini Vision
+      // STEP 1: Analyze image with OpenAI Vision
       if (imageData) {
-        setStage('Analyzing image with AI...');
+        setStage('Analyzing image with AI vision...');
         
-        const visionPrompt = `You are an expert on Indian government schemes and documents. Analyze this image thoroughly.
-
-TASK:
+        const visionPrompt = `You are an expert on Indian government schemes and documents. Look at this image carefully and:
 1. Read ALL text visible in this image
-2. Identify any government schemes mentioned - look for names like PM-KISAN, Ujjwala, Ayushman, Digital India, Skill India, etc.
+2. Identify ANY government scheme mentioned - look for names like PM-KISAN, Ujjwala, Ayushman Bharat, Digital India, Skill India, Stand Up India, Mudra Yojana, Sukanya Samriddhi, etc.
 3. Check if it looks like a scam or fraud
 4. Provide complete details about any schemes found
 
-IMPORTANT: Be very thorough. Even if the scheme name is partial or mentioned briefly, try to identify it.
+Be thorough - even partial mentions of schemes count!
 
-Return ONLY valid JSON with this exact format (no other text):
+Return your response as a JSON object with this exact structure (ONLY the JSON, no other text):
 {
   "is_scam": false,
   "document_type": "what type of document is this",
-  "extracted_text": "all the text you can read from the image",
+  "extracted_text": "all the text you can read from the image word by word",
   "scam_warnings": ["any warning if suspicious"],
   "schemes_found": [
     {
       "name": "Official scheme name",
       "category": "education|health|housing|employment|agriculture|women|financial|skill|startup|social",
       "ministry": "Ministry name",
-      "official_url": "https://...",
-      "apply_url": "https://...",
-      "eligibility": "Who can apply",
-      "benefits": "What benefits you get",
-      "documents_required": "Documents needed",
-      "how_to_apply": "How to apply",
+      "official_url": "official government website URL",
+      "apply_url": "direct apply link if available",
+      "eligibility": "Who can apply for this scheme",
+      "benefits": "What benefits you get from this scheme",
+      "documents_required": "List of documents needed",
+      "how_to_apply": "How to apply step by step",
       "status": "Active",
-      "description": "Full description"
+      "description": "Brief description of what this scheme does"
     }
   ],
-  "recommendations": ["helpful tips"]
+  "recommendations": ["helpful tips for the user"]
 }
 
-If NO schemes are found, return: {"schemes_found": [], "summary": "No government schemes detected in this image"}`;
+If NO schemes are found, still return the JSON with empty schemes_found array. Always include the extracted_text field with everything you can read.`;
 
         try {
-          // Use google_gemini_chat with image for vision analysis
-          const visionResult = await doable.integrations.run('google_gemini', 'chat', {
+          // Use OpenAI Vision for image analysis
+          const visionResult = await doable.integrations.run('openai', 'vision_prompt', {
+            image: imageData,
             prompt: visionPrompt,
-            imageUrl: imageData,
-            model: 'gemini-1.5-flash'
+            detail: 'high'
           });
+          
+          console.log('Vision result:', visionResult);
           
           if (visionResult.success && visionResult.data) {
             const responseText = typeof visionResult.data === 'string' 
               ? visionResult.data 
               : JSON.stringify(visionResult.data);
+            
+            setRawResponse(responseText);
             
             // Extract JSON from response
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -103,11 +107,10 @@ If NO schemes are found, return: {"schemes_found": [], "summary": "No government
               try {
                 const parsed = JSON.parse(jsonMatch[0]);
                 
-                // Handle both response formats
                 const schemes = parsed.schemes_found || [];
                 const summary = parsed.summary || (schemes.length > 0 
-                  ? `Found ${schemes.length} scheme(s) in the image` 
-                  : 'No government schemes detected');
+                  ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''} in the image!` 
+                  : 'No government schemes detected in this image');
                 
                 setResult({
                   is_scam: parsed.is_scam || false,
@@ -124,20 +127,33 @@ If NO schemes are found, return: {"schemes_found": [], "summary": "No government
                 return;
               } catch (parseErr) {
                 console.error('JSON parse error:', parseErr);
-                setError('Failed to parse AI response');
+                setError('Could not understand AI response. Please try again.');
               }
             } else {
-              // No JSON found - try text analysis
+              // No JSON found - show raw response
               setExtractedText(responseText);
+              setResult({
+                is_scam: false,
+                document_type: 'image',
+                extracted_text: responseText,
+                summary: 'Analysis complete - see extracted text below',
+                scam_warnings: [],
+                schemes_found: [],
+                recommendations: []
+              });
+              setProcessing(false);
+              return;
             }
+          } else {
+            setError(visionResult.error || 'Failed to analyze image');
           }
-        } catch (e) {
+        } catch (e: any) {
           console.error('Vision error:', e);
-          setError('Failed to analyze image. Please try again.');
+          setError('Failed to analyze image: ' + (e.message || 'Unknown error'));
         }
       }
 
-      // STEP 2: If text input is provided, analyze it
+      // STEP 2: If text input is provided, analyze it with Gemini
       if (textData.trim()) {
         setStage('Finding schemes in text...');
         
@@ -146,7 +162,7 @@ If NO schemes are found, return: {"schemes_found": [], "summary": "No government
 TEXT TO ANALYZE:
 ${textData}
 
-Return ONLY valid JSON:
+Return your response as a JSON object:
 {
   "is_scam": false,
   "document_type": "what type of document",
@@ -157,14 +173,14 @@ Return ONLY valid JSON:
       "name": "Official scheme name",
       "category": "education|health|housing|employment|agriculture|women|financial|skill|startup|social",
       "ministry": "Ministry name",
-      "official_url": "https://...",
-      "apply_url": "https://...",
+      "official_url": "official website",
+      "apply_url": "apply link",
       "eligibility": "Who can apply",
       "benefits": "What you get",
       "documents_required": "Documents needed",
       "how_to_apply": "Application process",
       "status": "Active",
-      "description": "Full description"
+      "description": "Brief description"
     }
   ],
   "recommendations": ["advice"]
@@ -213,9 +229,9 @@ If NO schemes are found: {"schemes_found": [], "summary": "No government schemes
         recommendations: ['Browse the Schemes page for government benefits', 'Use Chat for personalized scheme recommendations']
       });
       
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error:', err);
-      setError('Analysis failed. Please try again.');
+      setError('Analysis failed: ' + (err.message || 'Please try again.'));
       setResult({ 
         is_scam: false, 
         document_type: 'error', 
@@ -327,7 +343,7 @@ If NO schemes are found: {"schemes_found": [], "summary": "No government schemes
             {image && (
               <div className="relative rounded-2xl overflow-hidden bg-white shadow-sm">
                 <img src={image} alt="Uploaded" className="w-full max-h-64 object-contain" />
-                <button onClick={() => { setImage(null); setResult(null); setError(''); }} className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70">
+                <button onClick={() => { setImage(null); setResult(null); setError(''); setRawResponse(''); }} className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -356,6 +372,14 @@ If NO schemes are found: {"schemes_found": [], "summary": "No government schemes
               Analyze Text
             </button>
           </>
+        )}
+
+        {/* Debug Response - Hidden by default */}
+        {rawResponse && !result?.schemes_found?.length && (
+          <details className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
+            <summary className="cursor-pointer font-medium text-yellow-800 text-sm">Debug: Raw AI Response</summary>
+            <pre className="mt-2 text-xs text-yellow-700 whitespace-pre-wrap overflow-auto max-h-60">{rawResponse}</pre>
+          </details>
         )}
 
         {/* SCHEMES FOUND - MAIN DISPLAY */}
@@ -489,12 +513,18 @@ If NO schemes are found: {"schemes_found": [], "summary": "No government schemes
             </div>
             <h3 className="font-semibold text-gray-800 text-lg mb-2">No Schemes Found</h3>
             <p className="text-sm text-gray-500 mb-4">{result.summary}</p>
-            <p className="text-xs text-gray-400">Try uploading a different image or browse schemes manually</p>
+            {result.extracted_text && (
+              <details className="text-left mt-4">
+                <summary className="cursor-pointer text-sm text-[#1B3A6B] font-medium">View what was read from image</summary>
+                <p className="mt-2 text-xs text-gray-600 bg-gray-50 p-3 rounded-xl whitespace-pre-wrap">{result.extracted_text}</p>
+              </details>
+            )}
+            <p className="text-xs text-gray-400 mt-4">Try uploading a different image or browse schemes manually</p>
           </div>
         )}
 
-        {/* Extracted Text */}
-        {result && !processing && result.extracted_text && (
+        {/* Extracted Text - Full Display */}
+        {result && !processing && result.extracted_text && result.schemes_found?.length === 0 && (
           <details className="bg-white rounded-2xl shadow-sm border border-gray-100">
             <summary className="p-4 cursor-pointer font-medium text-gray-700 flex items-center gap-2 hover:bg-gray-50">
               <Eye className="w-4 h-4" /> View Extracted Text
