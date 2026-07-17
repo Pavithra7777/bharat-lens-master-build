@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { db } from '@doable/data';
 import { Calendar, List, Plus, Bell, Check, Trash2 } from 'lucide-react';
 
@@ -20,14 +20,10 @@ export function RemindersPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState('');
 
-  useEffect(() => {
-    loadReminders();
-  }, []);
-
-  async function loadReminders() {
+  const loadReminders = useCallback(async () => {
     setLoading(true);
     try {
-      // Query all reminders - RLS handles owner filtering
+      // Query all reminders - RLS handles owner filtering via created_by
       const r = await db.query<Reminder>(
         'SELECT * FROM reminders ORDER BY due_date ASC'
       );
@@ -39,7 +35,11 @@ export function RemindersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadReminders();
+  }, [loadReminders]);
 
   async function addReminder() {
     if (!newTitle.trim() || !newDate) return;

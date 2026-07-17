@@ -40,12 +40,11 @@ export function HomePage() {
     setLoading(true);
 
     try {
-      // Load upcoming reminders
+      // Load upcoming reminders - RLS handles owner filtering via created_by
       const remindersR = await db.query<Reminder>(
         `SELECT id, title, due_date FROM reminders 
-         WHERE owner_id = $1 AND is_completed = false AND due_date >= CURRENT_DATE 
-         ORDER BY due_date ASC LIMIT 3`,
-        [profile.id]
+         WHERE is_completed = false AND due_date >= CURRENT_DATE 
+         ORDER BY due_date ASC LIMIT 3`
       );
       if (remindersR.ok) setReminders(remindersR.rows);
 

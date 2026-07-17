@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { Link } from '../lib/Router';
-import { FolderOpen, FileText, CreditCard, Car, Home, Trash2, Eye, Calendar, IdCard, Sparkles, AlertTriangle, FileCheck } from 'lucide-react';
+import { FolderOpen, FileText, CreditCard, Car, Home, Trash2, Eye, Calendar, IdCard, Sparkles, AlertTriangle, FileCheck, ExternalLink } from 'lucide-react';
 
 interface VaultItem {
   id: string;
@@ -311,10 +311,10 @@ export function VaultPage() {
               </p>
               
               <div className="flex gap-3">
-                <button className="flex-1 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2">
+                <Link to="/scan" className="flex-1 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2">
                   <Eye className="w-4 h-4" />
-                  View Details
-                </button>
+                  Scan New
+                </Link>
                 <button
                   onClick={() => deleteItem(selectedItem.id)}
                   className="w-14 h-14 border-2 border-red-200 text-red-500 rounded-xl flex items-center justify-center"
