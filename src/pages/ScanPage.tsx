@@ -171,7 +171,10 @@ If NO schemes are found, still return the JSON with empty schemes_found array. A
               return;
             }
           } else {
-            setError(visionResult.error || 'Failed to analyze image. Please try again.');
+            const errorMsg = visionResult.error || visionResult.message || 'Failed to analyze image. Please try again.';
+            console.error('Vision API error:', errorMsg);
+            console.error('Full vision result:', JSON.stringify(visionResult, null, 2));
+            setError(errorMsg);
           }
         } catch (e: any) {
           console.error('Vision error:', e);
