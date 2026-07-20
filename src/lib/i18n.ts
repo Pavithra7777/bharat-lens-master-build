@@ -21,7 +21,7 @@ export const LANGUAGES: LanguageOption[] = [
 
 type TranslationKey = string;
 
-const translations: Record<Language, Record<string, string>> = {
+export const translations: Record<Language, Record<string, string>> = {
   en: {
     // Navigation
     'nav.home': 'Home',
