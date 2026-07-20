@@ -52,6 +52,11 @@ export function useRouter() {
   return context;
 }
 
+export function useNavigate() {
+  const { navigate } = useRouter();
+  return navigate;
+}
+
 export function Link({ to, children, className, onClick }: {
   to: string;
   children: ReactNode;
