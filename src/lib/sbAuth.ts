@@ -1,18 +1,14 @@
 /**
- * Supabase Auth wrapper that mirrors @doable/data auth interface.
- * This allows the app to switch from @doable/data to Supabase seamlessly.
+ * Auth wrapper using @doable/data built-in auth.
+ * This provides the same interface as the previous Supabase auth.
  */
-import { supabase } from './supabase';
-import type { User } from '@supabase/supabase-js';
+import { db } from '@doable/data';
 
 export interface AuthUser {
   id: string;
   email?: string;
 }
 
-// Supabase doesn't expose the isAdmin flag — it's set by the platform
-// For cross-user admin queries, use db.admin.query from @doable/data
-// For user-owned data, Supabase RLS handles scoping automatically
 export interface AuthResult {
   user: AuthUser | null;
   error?: string;
@@ -20,18 +16,13 @@ export interface AuthResult {
 
 export const sbAuth = {
   async getUser(): Promise<{ user: AuthUser | null }> {
-    if (!supabase) {
-      return { user: null };
-    }
     try {
-      const { data, error } = await supabase.auth.getUser();
-      if (error || !data.user) {
-        return { user: null };
-      }
+      const { user } = await db.auth.getUser();
+      if (!user) return { user: null };
       return {
         user: {
-          id: data.user.id,
-          email: data.user.email,
+          id: user.id,
+          email: (user as any).email,
         },
       };
     } catch {
@@ -40,55 +31,59 @@ export const sbAuth = {
   },
 
   async signUp(email: string, password: string): Promise<AuthResult> {
-    if (!supabase) {
-      return { user: null, error: 'Supabase not configured' };
+    try {
+      const result = await db.auth.signup({ email, password });
+      if (!result.ok) {
+        return { user: null, error: result.message || 'Signup failed' };
+      }
+      return {
+        user: {
+          id: result.user?.id || '',
+          email: email,
+        },
+      };
+    } catch (err: any) {
+      return { user: null, error: err?.message || 'Signup failed' };
     }
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    if (error) {
-      return { user: null, error: error.message };
-    }
-    return {
-      user: data.user
-        ? { id: data.user.id, email: data.user.email }
-        : null,
-    };
   },
 
   async login(email: string, password: string): Promise<AuthResult> {
-    if (!supabase) {
-      return { user: null, error: 'Supabase not configured' };
+    try {
+      const result = await db.auth.login({ email, password });
+      if (!result.ok) {
+        return { user: null, error: result.message || 'Login failed' };
+      }
+      return {
+        user: {
+          id: result.user?.id || '',
+          email: email,
+        },
+      };
+    } catch (err: any) {
+      return { user: null, error: err?.message || 'Login failed' };
     }
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) {
-      return { user: null, error: error.message };
-    }
-    return {
-      user: data.user
-        ? { id: data.user.id, email: data.user.email }
-        : null,
-    };
   },
 
   async logout(): Promise<void> {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    try {
+      await db.auth.logout();
+    } catch {
+      // ignore
+    }
   },
 
   onAuthStateChange(callback: (user: AuthUser | null) => void) {
-    if (!supabase) return () => {};
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      callback(
-        session?.user
-          ? { id: session.user.id, email: session.user.email }
-          : null
-      );
-    });
-    return () => data.subscription.unsubscribe();
+    let mounted = true;
+    const check = async () => {
+      if (!mounted) return;
+      const { user } = await this.getUser();
+      if (mounted) callback(user);
+    };
+    check();
+    const interval = setInterval(check, 1000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   },
 };

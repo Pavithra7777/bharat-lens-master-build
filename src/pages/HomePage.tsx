@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from '../lib/Router';
 import { useApp } from '../lib/AppContext';
-import { supabase } from '../lib/supabase';
+import { db } from '@doable/data';
 import { translations } from '../lib/i18n';
 import { Bell, Search, Shield, ChevronRight, Mic, Camera, FileText, Users, AlertTriangle, Loader2, Bookmark, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -42,25 +42,19 @@ export function HomePage() {
   }, []);
 
   async function loadData() {
-    if (!supabase || !user) { setLoading(false); return; }
+    if (!user) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [remindersRes, schemesRes] = await Promise.all([
-        supabase
-          .from('reminders')
-          .select('*')
-          .eq('user_id', user.id)
-          .in('status', ['pending', 'upcoming'])
-          .order('due_date', { ascending: true })
-          .limit(5),
-        supabase
-          .from('schemes')
-          .select('id, name, category, description, benefits, eligibility, deadline, tag, official_link')
-          .order('created_at', { ascending: false })
-          .limit(6),
-      ]);
-      if (remindersRes.data) setReminders(remindersRes.data as Reminder[]);
-      if (schemesRes.data) setSchemes(schemesRes.data as Scheme[]);
+      const remindersRes = await db.query<Reminder>(
+        `SELECT * FROM reminders WHERE created_by = $1 AND is_completed = false ORDER BY due_date ASC LIMIT 5`,
+        [user.id]
+      );
+      const schemesRes = await db.query<Scheme>(
+        `SELECT id, title as name, category, description, short_benefit as benefits, null as deadline, tags as tag, official_url as official_link FROM schemes WHERE is_active = true ORDER BY created_at DESC LIMIT 6`,
+        []
+      );
+      if (remindersRes.ok && remindersRes.rows) setReminders(remindersRes.rows);
+      if (schemesRes.ok && schemesRes.rows) setSchemes(schemesRes.rows);
     } catch (error) {
       console.error('Home data load failed:', error);
     } finally {
@@ -68,8 +62,6 @@ export function HomePage() {
     }
   }
 
-  const upcomingReminders = reminders.filter(r => r.status === 'upcoming');
-  const pendingReminders = reminders.filter(r => r.status === 'pending');
   const greeting = getGreeting();
 
   function getGreeting() {
@@ -126,7 +118,7 @@ export function HomePage() {
             {reminders.length > 0 && (
               <div className="bg-white rounded-2xl shadow-sm p-5 -mt-2">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold text-[#1A1A2E]">{t.reminders?.upcoming || 'Upcoming'}</h2>
+                  <h2 className="font-semibold text-[#1A1A2E]">Upcoming Reminders</h2>
                   <button onClick={() => navigate('/reminders')} className="text-[#1B3A6B] text-sm font-medium flex items-center gap-1">
                     View All <ChevronRight className="w-4 h-4" />
                   </button>
@@ -167,7 +159,7 @@ export function HomePage() {
             {schemes.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold text-[#1A1A2E]">{t.schemes?.recommended || 'Recommended for You'}</h2>
+                  <h2 className="font-semibold text-[#1A1A2E]">Recommended for You</h2>
                   <button onClick={() => navigate('/schemes')} className="text-[#1B3A6B] text-sm font-medium flex items-center gap-1">
                     View All <ChevronRight className="w-4 h-4" />
                   </button>

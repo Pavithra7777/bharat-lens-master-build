@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { supabase, isSupabaseConfigured } from './supabase';
+import { db } from '@doable/data';
 import { sbAuth } from './sbAuth';
 import { type Language } from './i18n';
 
@@ -61,10 +61,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function checkAuth() {
-    if (!isSupabaseConfigured()) {
-      setIsLoading(false);
-      return;
-    }
     try {
       const { user: currentUser } = await sbAuth.getUser();
       if (currentUser) {
@@ -79,38 +75,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function loadOrCreateProfile(userId: string) {
-    if (!supabase) return;
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      const result = await db.query<Profile>(
+        'SELECT * FROM profiles WHERE id = $1 LIMIT 1',
+        [userId]
+      );
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Load profile error:', error);
-        return;
-      }
-
-      if (data) {
-        setProfile(data as Profile);
+      if (result.ok && result.rows && result.rows.length > 0) {
+        const data = result.rows[0];
+        setProfile(data);
         setSimpleModeState(data.simple_mode_enabled || false);
         setLanguageState((data.preferred_language as Language) || 'en');
         await loadFamilyMembers(data.id);
       } else {
         // Create new profile
-        const { data: newProfile, error: insertError } = await supabase
-          .from('profiles')
-          .insert({
-            id: userId,
-            full_name: 'User',
-            preferred_language: 'en',
-          })
-          .select()
-          .single();
-
-        if (!insertError && newProfile) {
-          setProfile(newProfile as Profile);
+        const insertResult = await db.query<Profile>(
+          `INSERT INTO profiles (id, full_name, preferred_language) 
+           VALUES ($1, $2, $3) 
+           RETURNING *`,
+          [userId, 'User', 'en']
+        );
+        if (insertResult.ok && insertResult.rows && insertResult.rows.length > 0) {
+          setProfile(insertResult.rows[0]);
         }
       }
     } catch (error) {
@@ -119,23 +105,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function loadFamilyMembers(profileId: string) {
-    if (!supabase) return;
     try {
-      const { data: groupData } = await supabase
-        .from('family_groups')
-        .select('id')
-        .eq('owner_id', profileId)
-        .maybeSingle();
+      const groupResult = await db.query<{ id: string }>(
+        'SELECT id FROM family_groups WHERE owner_id = $1 LIMIT 1',
+        [profileId]
+      );
 
-      if (groupData) {
-        const { data: membersData } = await supabase
-          .from('family_members')
-          .select('*')
-          .eq('family_group_id', groupData.id)
-          .order('invited_at', { ascending: true });
-
-        if (membersData) {
-          setFamilyMembers(membersData as FamilyMember[]);
+      if (groupResult.ok && groupResult.rows && groupResult.rows.length > 0) {
+        const membersResult = await db.query<FamilyMember>(
+          'SELECT * FROM family_members WHERE family_group_id = $1 ORDER BY invited_at ASC',
+          [groupResult.rows[0].id]
+        );
+        if (membersResult.ok && membersResult.rows) {
+          setFamilyMembers(membersResult.rows);
         }
       }
     } catch (error) {
@@ -164,22 +146,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function setSimpleMode(enabled: boolean) {
     setSimpleModeState(enabled);
-    if (profile && supabase) {
-      await supabase
-        .from('profiles')
-        .update({ simple_mode_enabled: enabled, updated_at: new Date().toISOString() })
-        .eq('id', profile.id);
+    if (profile) {
+      await db.query(
+        'UPDATE profiles SET simple_mode_enabled = $1, updated_at = now() WHERE id = $2',
+        [enabled, profile.id]
+      );
       setProfile(prev => prev ? { ...prev, simple_mode_enabled: enabled } : null);
     }
   }
 
   async function setLanguage(lang: Language) {
     setLanguageState(lang);
-    if (profile && supabase) {
-      await supabase
-        .from('profiles')
-        .update({ preferred_language: lang, updated_at: new Date().toISOString() })
-        .eq('id', profile.id);
+    if (profile) {
+      await db.query(
+        'UPDATE profiles SET preferred_language = $1, updated_at = now() WHERE id = $2',
+        [lang, profile.id]
+      );
       setProfile(prev => prev ? { ...prev, preferred_language: lang } : null);
     }
   }
