@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { db } from '@doable/data';
+import { supabase, isSupabaseConfigured } from './supabase';
+import { sbAuth } from './sbAuth';
 import { type Language } from './i18n';
 
-// Types
 export interface Profile {
   id: string;
   full_name: string | null;
@@ -29,28 +29,19 @@ export interface FamilyMember {
 }
 
 export interface AppState {
-  // Auth
   user: { id: string; email?: string } | null;
   isLoading: boolean;
-  
-  // Profile
   profile: Profile | null;
-  
-  // Family
   familyMembers: FamilyMember[];
   activeFamilyMemberId: string | null;
-  
-  // UI
   simpleMode: boolean;
   language: Language;
-  
-  // Actions
   setUser: (user: { id: string; email?: string } | null) => void;
   setProfile: (profile: Profile | null) => void;
   setSimpleMode: (enabled: boolean) => void;
   setLanguage: (lang: Language) => void;
   setActiveFamilyMember: (id: string | null) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -65,14 +56,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [simpleMode, setSimpleModeState] = useState(false);
   const [language, setLanguageState] = useState<Language>('en');
 
-  // Check auth on mount
   useEffect(() => {
     checkAuth();
   }, []);
 
   async function checkAuth() {
+    if (!isSupabaseConfigured()) {
+      setIsLoading(false);
+      return;
+    }
     try {
-      const { user: currentUser } = await db.auth.getUser();
+      const { user: currentUser } = await sbAuth.getUser();
       if (currentUser) {
         setUserState(currentUser);
         await loadOrCreateProfile(currentUser.id);
@@ -85,31 +79,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function loadOrCreateProfile(userId: string) {
+    if (!supabase) return;
     try {
-      // Try to find existing profile by user_id (assuming profiles.id = auth user id)
-      const r = await db.query<Profile>(
-        'SELECT * FROM profiles WHERE id = $1 LIMIT 1',
-        [userId]
-      );
-      
-      if (r.ok && r.rows.length > 0 && r.rows[0]) {
-        const row = r.rows[0];
-        setProfile(row);
-        setSimpleModeState(row.simple_mode_enabled || false);
-        setLanguageState((row.preferred_language as Language) || 'en');
-        
-        // Load family members if family group exists
-        await loadFamilyMembers(row.id);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Load profile error:', error);
+        return;
+      }
+
+      if (data) {
+        setProfile(data as Profile);
+        setSimpleModeState(data.simple_mode_enabled || false);
+        setLanguageState((data.preferred_language as Language) || 'en');
+        await loadFamilyMembers(data.id);
       } else {
-        // Create new profile for this user
-        const insertR = await db.query<Profile>(
-          `INSERT INTO profiles (id, full_name, preferred_language) 
-           VALUES ($1, $2, $3) RETURNING *`,
-          [userId, 'User', 'en']
-        );
-        if (insertR.ok && insertR.rows.length > 0 && insertR.rows[0]) {
-          const newProfile = insertR.rows[0];
-          setProfile(newProfile);
+        // Create new profile
+        const { data: newProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
+            full_name: 'User',
+            preferred_language: 'en',
+          })
+          .select()
+          .single();
+
+        if (!insertError && newProfile) {
+          setProfile(newProfile as Profile);
         }
       }
     } catch (error) {
@@ -118,21 +119,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function loadFamilyMembers(profileId: string) {
-    if (!profileId) return;
+    if (!supabase) return;
     try {
-      // Find family group
-      const groupR = await db.query(
-        'SELECT id FROM family_groups WHERE owner_id = $1 LIMIT 1',
-        [profileId]
-      );
-      
-      if (groupR.ok && groupR.rows.length > 0 && groupR.rows[0]) {
-        const membersR = await db.query<FamilyMember>(
-          'SELECT * FROM family_members WHERE family_group_id = $1 ORDER BY invited_at',
-          [groupR.rows[0].id]
-        );
-        if (membersR.ok && membersR.rows) {
-          setFamilyMembers(membersR.rows);
+      const { data: groupData } = await supabase
+        .from('family_groups')
+        .select('id')
+        .eq('owner_id', profileId)
+        .maybeSingle();
+
+      if (groupData) {
+        const { data: membersData } = await supabase
+          .from('family_members')
+          .select('*')
+          .eq('family_group_id', groupData.id)
+          .order('invited_at', { ascending: true });
+
+        if (membersData) {
+          setFamilyMembers(membersData as FamilyMember[]);
         }
       }
     } catch (error) {
@@ -161,22 +164,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function setSimpleMode(enabled: boolean) {
     setSimpleModeState(enabled);
-    if (profile) {
-      await db.query(
-        'UPDATE profiles SET simple_mode_enabled = $1, updated_at = now() WHERE id = $2',
-        [enabled, profile.id]
-      );
+    if (profile && supabase) {
+      await supabase
+        .from('profiles')
+        .update({ simple_mode_enabled: enabled, updated_at: new Date().toISOString() })
+        .eq('id', profile.id);
       setProfile(prev => prev ? { ...prev, simple_mode_enabled: enabled } : null);
     }
   }
 
   async function setLanguage(lang: Language) {
     setLanguageState(lang);
-    if (profile) {
-      await db.query(
-        'UPDATE profiles SET preferred_language = $1, updated_at = now() WHERE id = $2',
-        [lang, profile.id]
-      );
+    if (profile && supabase) {
+      await supabase
+        .from('profiles')
+        .update({ preferred_language: lang, updated_at: new Date().toISOString() })
+        .eq('id', profile.id);
       setProfile(prev => prev ? { ...prev, preferred_language: lang } : null);
     }
   }
@@ -186,7 +189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    await db.auth.logout();
+    await sbAuth.logout();
     setUser(null);
     setProfile(null);
     setFamilyMembers([]);
