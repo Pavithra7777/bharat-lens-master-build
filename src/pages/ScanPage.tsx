@@ -31,23 +31,88 @@ export function ScanPage() {
     try {
       const doable = createDoableClient();
       
-      // Use Groq Vision directly to analyze the image
+      // Azure Computer Vision API credentials
+      const AZURE_VISION_KEY = 'Fl2AbOqkbelMbWe6oGbxZtDVhoND2XOf7o1lExllXkWY9PIYjLEaJQQJ99CGACGhslBXJ3w3AAAFACOGJv24';
+      const AZURE_VISION_ENDPOINT = 'https://internshipvisionapi.cognitiveservices.azure.com';
+      
+      // STEP 1: Extract text from image using Azure Computer Vision OCR
       if (imageData) {
-        setStage('Analyzing image with AI...');
+        setStage('Extracting text with Azure Vision...');
         
-        // Extract base64 data from data URL
+        // Convert base64 to Blob
         const base64Image = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+        const byteCharacters = atob(base64Image);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const imageBlob = new Blob([byteArray], { type: 'image/jpeg' });
         
-        const analysisPrompt = `You are an expert on Indian government schemes and document analysis. Analyze this image and:
-1. Extract ALL text visible in the image
-2. Identify any government schemes or programs mentioned
-3. Determine if the document appears legitimate or suspicious
+        try {
+          // Call Azure Computer Vision OCR API
+          const response = await fetch(`${AZURE_VISION_ENDPOINT}/vision/v3.2/ocr?language=unk&detectOrientation=true`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/octet-stream',
+              'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY
+            },
+            body: imageBlob
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Azure Vision API error:', response.status, errorText);
+            throw new Error(`Azure Vision API error: ${response.status}`);
+          }
+          
+          const ocrResult = await response.json();
+          console.log('Azure OCR result:', ocrResult);
+          
+          // Extract text from Azure OCR response
+          let extractedTextFromImage = '';
+          if (ocrResult.regions) {
+            for (const region of ocrResult.regions) {
+              for (const line of region.lines) {
+                for (const word of line.words) {
+                  extractedTextFromImage += word.text + ' ';
+                }
+                extractedTextFromImage += '\n';
+              }
+            }
+          }
+          
+          extractedTextFromImage = extractedTextFromImage.trim();
+          console.log('Extracted text:', extractedTextFromImage);
+          setExtractedText(extractedTextFromImage);
+          
+          if (!extractedTextFromImage) {
+            setResult({
+              is_scam: false,
+              document_type: 'image',
+              extracted_text: '',
+              summary: 'No text found in the image. Try a clearer image.',
+              scam_warnings: [],
+              schemes_found: [],
+              recommendations: ['Try uploading a clearer image with visible text', 'Ensure the document is well-lit and in focus']
+            });
+            setProcessing(false);
+            return;
+          }
+          
+          // STEP 2: Analyze extracted text with Groq for scheme detection
+          setStage('Finding schemes in text...');
+          
+          const analysisPrompt = `You are an expert on Indian government schemes. Analyze this text extracted from an image and identify any government schemes mentioned.
+
+TEXT FROM IMAGE:
+${extractedTextFromImage}
 
 Return your response as a JSON object with this exact structure (ONLY the JSON, no other text):
 {
   "is_scam": false,
   "document_type": "what type of document is this",
-  "extracted_text": "ALL text transcribed from the image",
+  "extracted_text": "the text above",
   "scam_warnings": [],
   "schemes_found": [
     {
@@ -67,110 +132,78 @@ Return your response as a JSON object with this exact structure (ONLY the JSON, 
   "recommendations": ["tips"]
 }
 
-If NO schemes are found, still return the JSON with empty schemes_found array. Extract ALL text visible.`;
+If NO schemes are found, still return the JSON with empty schemes_found array.`;
 
-        let visionResult;
-        try {
-          console.log('Starting Groq vision analysis...');
-          visionResult = await doable.integrations.run('groq', 'ask-ai', {
-            model: 'llama-3.2-11b-vision-preview',
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: analysisPrompt },
-                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
-                ]
-              }
-            ],
+          const visionResult = await doable.integrations.run('groq', 'ask-ai', {
+            query: analysisPrompt,
+            maxTokens: 4096,
             temperature: 0.3
           });
-          console.log('Groq response received:', typeof visionResult);
-        } catch (apiErr: any) {
-          console.error('Groq API call failed:', apiErr);
-          setError('Failed to connect to AI service: ' + (apiErr?.message || apiErr?.toString() || 'Please check your internet connection.'));
-          setProcessing(false);
-          return;
-        }
-        
-        console.log('Vision result:', visionResult);
-        
-        if ((visionResult.success !== false && visionResult.data)) {
-          let responseText = '';
           
-          if (typeof visionResult.data === 'string') {
-            responseText = visionResult.data;
-          } else if (visionResult.data.choices && visionResult.data.choices[0]?.message?.content) {
-            responseText = visionResult.data.choices[0].message.content;
-          } else {
-            responseText = JSON.stringify(visionResult.data);
-          }
+          console.log('Groq response:', visionResult);
           
-          setRawResponse(responseText);
-          
-          // Extract JSON from response
-          const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            try {
-              const parsed = JSON.parse(jsonMatch[0]);
-              const schemes = parsed.schemes_found || [];
-              const summary = parsed.summary || (schemes.length > 0 
-                ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''} in the image!` 
-                : 'Analysis complete - no government schemes detected');
-              
-              setResult({
-                is_scam: parsed.is_scam || false,
-                document_type: parsed.document_type || 'image',
-                extracted_text: parsed.extracted_text || responseText,
-                summary: summary,
-                scam_warnings: parsed.scam_warnings || [],
-                schemes_found: schemes,
-                recommendations: parsed.recommendations || []
-              });
-              
-              setExtractedText(parsed.extracted_text || '');
-              setProcessing(false);
-              return;
-            } catch (parseErr) {
-              console.error('JSON parse error:', parseErr);
-              setExtractedText(responseText);
-              setResult({
-                is_scam: false,
-                document_type: 'image',
-                extracted_text: responseText,
-                summary: 'Analysis complete - review the extracted content',
-                scam_warnings: [],
-                schemes_found: [],
-                recommendations: []
-              });
-              setProcessing(false);
-              return;
+          if ((visionResult as any).success !== false && (visionResult as any).data) {
+            let responseText = '';
+            const data = (visionResult as any).data;
+            if (typeof data === 'string') {
+              responseText = data;
+            } else if (data.choices && data.choices[0]?.message?.content) {
+              responseText = data.choices[0].message.content;
+            } else {
+              responseText = JSON.stringify(data);
             }
-          } else {
-            setExtractedText(responseText);
+            
+            setRawResponse(responseText);
+            
+            // Extract JSON from response
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                const schemes = parsed.schemes_found || [];
+                const summary = parsed.summary || (schemes.length > 0 
+                  ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''} in the image!` 
+                  : 'Analysis complete - no government schemes detected');
+                
+                setResult({
+                  is_scam: parsed.is_scam || false,
+                  document_type: parsed.document_type || 'image',
+                  extracted_text: extractedTextFromImage,
+                  summary: summary,
+                  scam_warnings: parsed.scam_warnings || [],
+                  schemes_found: schemes,
+                  recommendations: parsed.recommendations || []
+                });
+                
+                setProcessing(false);
+                return;
+              } catch (parseErr) {
+                console.error('JSON parse error:', parseErr);
+              }
+            }
+            
+            // If JSON parsing failed, show raw response
             setResult({
               is_scam: false,
               document_type: 'image',
-              extracted_text: responseText,
+              extracted_text: extractedTextFromImage,
               summary: 'Analysis complete',
               scam_warnings: [],
               schemes_found: [],
               recommendations: []
             });
-            setProcessing(false);
-            return;
+          } else {
+            setError('Failed to analyze text. Please try again.');
           }
-        } else {
-          let errorMsg = 'Failed to analyze image. Please try again.';
-          if (visionResult) {
-            errorMsg = (visionResult as any).error?.message || visionResult.error || JSON.stringify(visionResult);
-          }
-          console.error('Vision API error:', errorMsg);
-          setError('Image analysis failed: ' + errorMsg);
+        } catch (apiErr: any) {
+          console.error('Azure/Groq API call failed:', apiErr);
+          setError('Failed to analyze image: ' + (apiErr?.message || apiErr?.toString() || 'Please check your internet connection.'));
+          setProcessing(false);
+          return;
         }
       }
 
-      // If text input is provided, analyze it with Groq
+      // If text input is provided, analyze it directly with Groq
       if (textData.trim()) {
         setStage('Finding schemes in text...');
         
@@ -205,19 +238,20 @@ Return your response as a JSON object:
 
         try {
           const visionResult = await doable.integrations.run('groq', 'ask-ai', {
-            model: 'llama-3.2-11b-vision-preview',
-            messages: [{ role: 'user', content: analysisPrompt }],
+            query: analysisPrompt,
+            maxTokens: 4096,
             temperature: 0.3
           });
           
-          if (visionResult.success !== false && visionResult.data) {
+          if ((visionResult as any).success !== false && (visionResult as any).data) {
             let responseText = '';
-            if (typeof visionResult.data === 'string') {
-              responseText = visionResult.data;
-            } else if (visionResult.data.choices && visionResult.data.choices[0]?.message?.content) {
-              responseText = visionResult.data.choices[0].message.content;
+            const data = (visionResult as any).data;
+            if (typeof data === 'string') {
+              responseText = data;
+            } else if (data.choices && data.choices[0]?.message?.content) {
+              responseText = data.choices[0].message.content;
             } else {
-              responseText = JSON.stringify(visionResult.data);
+              responseText = JSON.stringify(data);
             }
             
             setRawResponse(responseText);
@@ -237,7 +271,6 @@ Return your response as a JSON object:
                 schemes_found: schemes,
                 recommendations: parsed.recommendations || []
               });
-              setExtractedText(textData);
             }
           }
         } catch (e: any) {
@@ -366,6 +399,7 @@ Return your response as a JSON object:
                   </div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Drop your image here</h3>
                   <p className="text-gray-500 text-sm">or click to browse</p>
+                  <p className="text-xs text-gray-400 mt-2">Powered by Azure Computer Vision OCR</p>
                 </>
               )}
             </div>
