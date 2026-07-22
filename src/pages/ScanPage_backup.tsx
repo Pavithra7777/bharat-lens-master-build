@@ -45,91 +45,23 @@ export function ScanPage() {
     try {
       const doable = createDoableClient();
       
-      // STEP 1: Analyze image with Microsoft Azure Computer Vision API for OCR
+      // STEP 1: Analyze image with Groq Vision (using chat completion with vision model)
       if (imageData) {
-        setStage('Extracting text from image with Azure Computer Vision...');
+        setStage('Analyzing image with AI vision...');
         
-        const AZURE_VISION_KEY = 'Fl2AbOqkbelMbWe6oGbxZtDVhoND2XOf7o1lExllXkWY9PIYjLEaJQQJ99CGACGhslBXJ3w3AAAFACOGJv24';
-        const AZURE_VISION_ENDPOINT = 'https://internshipvisionapi.cognitiveservices.azure.com';
-        
-        // Helper function to convert base64 to Blob
-        const base64ToBlob = (base64: string): Blob => {
-          const byteCharacters = atob(base64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          return new Blob([byteArray], { type: 'image/jpeg' });
-        };
-        
-        try {
-          // Extract base64 data from data URL
-          const base64Image = imageData.includes(',') ? imageData.split(',')[1] : imageData;
-          
-          // Call Azure Computer Vision OCR API
-          const response = await fetch(`${AZURE_VISION_ENDPOINT}/vision/v3.2/ocr?language=unk&detectOrientation=true`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/octet-stream',
-              'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY
-            },
-            body: base64ToBlob(base64Image)
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Azure Vision API error:', response.status, errorText);
-            throw new Error(`Azure Vision API error: ${response.status}`);
-          }
-          
-          const ocrResult = await response.json();
-          console.log('Azure OCR result:', ocrResult);
-          
-          // Extract text from Azure OCR response
-          let extractedText = '';
-          if (ocrResult.regions) {
-            for (const region of ocrResult.regions) {
-              for (const line of region.lines) {
-                for (const word of line.words) {
-                  extractedText += word.text + ' ';
-                }
-                extractedText += '\\n';
-              }
-            }
-          }
-          
-          extractedText = extractedText.trim();
-          console.log('Extracted text from Azure:', extractedText);
-          setExtractedText(extractedText);
-          
-          if (!extractedText) {
-            setResult({
-              is_scam: false,
-              document_type: 'image',
-              extracted_text: '',
-              summary: 'No text found in the image. Try a clearer image.',
-              scam_warnings: [],
-              schemes_found: [],
-              recommendations: ['Try uploading a clearer image with visible text', 'Ensure the document is well-lit and in focus']
-            });
-            setProcessing(false);
-            return;
-          }
-          
-          // STEP 2: Analyze extracted text with Groq for scheme detection
-          setStage('Analyzing extracted text for government schemes...');
-          
-          const analysisPrompt = `You are an expert on Indian government schemes and documents. Analyze this extracted text from an image and identify any government schemes mentioned.
+        const visionPrompt = `You are an expert on Indian government schemes and documents. Look at this image carefully and:
+1. Read ALL text visible in this image
+2. Identify ANY government scheme mentioned - look for names like PM-KISAN, Ujjwala, Ayushman Bharat, Digital India, Skill India, Stand Up India, Mudra Yojana, Sukanya Samriddhi, etc.
+3. Check if it looks like a scam or fraud
+4. Provide complete details about any schemes found
 
-TEXT FROM IMAGE:
-${extractedText}
+Be thorough - even partial mentions of schemes count!
 
 Return your response as a JSON object with this exact structure (ONLY the JSON, no other text):
 {
   "is_scam": false,
   "document_type": "what type of document is this",
-  "extracted_text": "all the text found",
+  "extracted_text": "all the text you can read from the image word by word",
   "scam_warnings": ["any warning if suspicious"],
   "schemes_found": [
     {
@@ -149,22 +81,34 @@ Return your response as a JSON object with this exact structure (ONLY the JSON, 
   "recommendations": ["helpful tips for the user"]
 }
 
-If NO schemes are found, still return the JSON with empty schemes_found array.`;
+If NO schemes are found, still return the JSON with empty schemes_found array. Always include the extracted_text field with everything you can read.`;
 
+        try {
+          // Use Groq for vision analysis - pass image as base64 in messages
           const messages = [
             {
               role: 'user',
-              content: [{ type: 'text', text: analysisPrompt }]
+              content: [
+                { type: 'text', text: visionPrompt },
+                { type: 'image_url', image_url: { url: imageData } }
+              ]
             }
           ];
 
           let visionResult;
           try {
-            console.log('Starting Groq text analysis...');
-            visionResult = await doable.integrations.run('groq', 'chat_completion', {
-              model: 'llama-3.2-11b-vision-preview',
-              messages: messages,
-              temperature: 0.3
+            console.log('Starting Groq vision analysis...');
+            console.log('Image data present:', !!imageData);
+            visionResult = await doable.integrations.run('groq', 'custom_api_call', {
+              url: 'https://api.groq.com/openai/v1/chat/completions',
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: { 
+                model: 'llama-3.2-11b-vision-preview',
+                messages: messages,
+                temperature: 0.3
+              },
+              body_type: 'json'
             });
             console.log('Groq response received:', typeof visionResult, Object.keys(visionResult || {}));
           } catch (apiErr: any) {
@@ -205,14 +149,14 @@ If NO schemes are found, still return the JSON with empty schemes_found array.`;
                 setResult({
                   is_scam: parsed.is_scam || false,
                   document_type: parsed.document_type || 'image',
-                  extracted_text: extractedText,
+                  extracted_text: parsed.extracted_text || '',
                   summary: summary,
                   scam_warnings: parsed.scam_warnings || [],
                   schemes_found: schemes,
                   recommendations: parsed.recommendations || []
                 });
                 
-                setExtractedText(extractedText);
+                setExtractedText(parsed.extracted_text || '');
                 setProcessing(false);
                 return;
               } catch (parseErr) {
