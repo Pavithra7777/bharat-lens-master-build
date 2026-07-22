@@ -72,7 +72,7 @@ If NO schemes are found, still return the JSON with empty schemes_found array. E
         let visionResult;
         try {
           console.log('Starting Groq vision analysis...');
-          visionResult = await doable.integrations.run('groq', 'chat_completion', {
+          visionResult = await doable.integrations.run('groq', 'ask-ai', {
             model: 'llama-3.2-11b-vision-preview',
             messages: [
               {
@@ -204,7 +204,7 @@ Return your response as a JSON object:
 }`;
 
         try {
-          const visionResult = await doable.integrations.run('groq', 'chat_completion', {
+          const visionResult = await doable.integrations.run('groq', 'ask-ai', {
             model: 'llama-3.2-11b-vision-preview',
             messages: [{ role: 'user', content: analysisPrompt }],
             temperature: 0.3
