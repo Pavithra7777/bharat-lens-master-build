@@ -99,9 +99,16 @@ If NO schemes are found, still return the JSON with empty schemes_found array. A
           try {
             console.log('Starting Groq vision analysis...');
             console.log('Image data present:', !!imageData);
-            visionResult = await doable.integrations.run('groq', 'chat_completion', {
-              messages,
-              model: 'llama-3.2-11b-vision-preview'
+            visionResult = await doable.integrations.run('groq', 'custom_api_call', {
+              url: 'https://api.groq.com/openai/v1/chat/completions',
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: { 
+                model: 'llama-3.2-11b-vision-preview',
+                messages: messages,
+                temperature: 0.3
+              },
+              body_type: 'json'
             });
             console.log('Groq response received:', typeof visionResult, Object.keys(visionResult || {}));
           } catch (apiErr: any) {
@@ -238,9 +245,16 @@ Return your response as a JSON object:
 }`;
 
         try {
-          const res = await doable.integrations.run('groq', 'chat_completion', {
-            messages: [{ role: 'user', content: analysisPrompt }],
-            model: 'llama-3.2-11b-vision-preview'
+          const res = await doable.integrations.run('groq', 'custom_api_call', {
+            url: 'https://api.groq.com/openai/v1/chat/completions',
+            method: 'POST',
+            
+            body: {
+              model: 'llama-3.2-11b-vision-preview',
+              messages: [{ role: 'user', content: analysisPrompt }],
+              temperature: 0.3
+            },
+            body_type: 'json'
           });
           
           if ((res.success !== false && res.data)) {
