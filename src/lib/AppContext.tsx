@@ -76,6 +76,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function loadOrCreateProfile(userId: string) {
     try {
+      // First try to read profile
       const result = await db.query<Profile>(
         'SELECT * FROM profiles WHERE id = $1 LIMIT 1',
         [userId]
@@ -88,10 +89,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLanguageState((data.preferred_language as Language) || 'en');
         await loadFamilyMembers(data.id);
       } else {
-        // Create new profile
+        // Create new profile with explicit created_by
         const insertResult = await db.query<Profile>(
-          `INSERT INTO profiles (id, full_name, preferred_language) 
-           VALUES ($1, $2, $3) 
+          `INSERT INTO profiles (id, full_name, preferred_language, created_by, onboarding_completed) 
+           VALUES ($1, $2, $3, $1, false) 
            RETURNING *`,
           [userId, 'User', 'en']
         );

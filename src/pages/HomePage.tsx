@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from '../lib/Router';
+import { useNavigate, Link } from '../lib/Router';
 import { useApp } from '../lib/AppContext';
 import { db } from '@doable/data';
 import { translations } from '../lib/i18n';
 import { Bell, Search, Shield, ChevronRight, Mic, Camera, FileText, Users, AlertTriangle, Loader2, Bookmark, ExternalLink } from 'lucide-react';
-import { Link } from 'react-router-dom';
+
 
 interface Reminder {
   id: string;
