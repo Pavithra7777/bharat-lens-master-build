@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AppProvider, useApp } from './lib/AppContext';
 import { RouterProvider, useRouter, Link } from './lib/Router';
 import { 
@@ -47,16 +47,18 @@ function AppContent() {
   const { user, isLoading, profile, simpleMode } = useApp();
   const { currentPath } = useRouter();
   const [showFullNav, setShowFullNav] = useState(false);
+  const prevUserRef = useRef<typeof user>(null);
 
   // Check if current page should show bottom nav (hide on detail pages)
-  const isDetailPage = currentPath.match(/^\/schemes\/[^/]+$/);
+  const isDetailPage = currentPath.startsWith('/schemes/') && currentPath.length > 9;
   
-  // Redirect to home when user logs in
+  // Redirect to home when user logs in (more robust tracking)
   useEffect(() => {
-    if (user && currentPath === '/auth') {
+    if (prevUserRef.current === null && user !== null) {
       window.location.hash = '/';
     }
-  }, [user, currentPath]);
+    prevUserRef.current = user;
+  }, [user]);
 
   const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
 
@@ -171,9 +173,9 @@ function AppContent() {
 
 function PageRouter({ currentPath }: { currentPath: string }) {
   // Handle scheme detail route
-  const schemeMatch = currentPath.match(/^\/schemes\/([^/]+)$/);
-  if (schemeMatch && schemeMatch[1]) {
-    return <SchemeDetailPage schemeId={schemeMatch[1]} />;
+  if (currentPath.startsWith('/schemes/') && currentPath.length > 9) {
+    const schemeId = currentPath.slice(9);
+    return <SchemeDetailPage schemeId={schemeId} />;
   }
 
   switch (currentPath) {
