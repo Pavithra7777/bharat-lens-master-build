@@ -95,14 +95,27 @@ If NO schemes are found, still return the JSON with empty schemes_found array. A
             }
           ];
 
-          const visionResult = await doable.integrations.run('groq', 'chat_completion', {
-            messages,
-            model: 'llama-3.2-11b-vision-preview'
-          });
+          let visionResult;
+          try {
+            console.log('Starting Groq vision analysis...');
+            console.log('Image data present:', !!imageData);
+            visionResult = await doable.integrations.run('groq', 'chat_completion', {
+              messages,
+              model: 'llama-3.2-11b-vision-preview'
+            });
+            console.log('Groq response received:', typeof visionResult, Object.keys(visionResult || {}));
+          } catch (apiErr: any) {
+            console.error('Groq API call failed:', apiErr);
+            console.error('Error type:', typeof apiErr);
+            console.error('Error details:', JSON.stringify(apiErr, Object.getOwnPropertyNames(apiErr)));
+            setError('Failed to connect to AI service: ' + (apiErr?.message || apiErr?.toString() || JSON.stringify(apiErr) || 'Please check your internet connection.'));
+            setProcessing(false);
+            return;
+          }
           
           console.log('Vision result:', visionResult);
           
-          if (visionResult.success && visionResult.data) {
+          if ((visionResult.success !== false && visionResult.data)) {
             let responseText = '';
             
             if (typeof visionResult.data === 'string') {
@@ -171,10 +184,19 @@ If NO schemes are found, still return the JSON with empty schemes_found array. A
               return;
             }
           } else {
-            const errorMsg = visionResult.error || visionResult.message || 'Failed to analyze image. Please try again.';
+            // Handle various error formats from the SDK
+            let errorMsg = 'Failed to analyze image. Please try again.';
+            if (visionResult) {
+              errorMsg = (visionResult as any).error?.message 
+                || (visionResult as any).error?.toString()
+                || (visionResult as any).message
+                || visionResult.error
+                || visionResult.message
+                || JSON.stringify(visionResult);
+            }
             console.error('Vision API error:', errorMsg);
             console.error('Full vision result:', JSON.stringify(visionResult, null, 2));
-            setError(errorMsg);
+            setError('Image analysis failed: ' + errorMsg);
           }
         } catch (e: any) {
           console.error('Vision error:', e);
@@ -221,7 +243,7 @@ Return your response as a JSON object:
             model: 'llama-3.2-11b-vision-preview'
           });
           
-          if (res.success && res.data) {
+          if ((res.success !== false && res.data)) {
             let responseText = '';
             
             if (typeof res.data === 'string') {
