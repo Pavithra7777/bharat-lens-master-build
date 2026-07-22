@@ -4,20 +4,6 @@ import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckC
 import { createDoableClient } from '@doable/sdk';
 import { db } from '@doable/data';
 
-interface SchemeResult {
-  name: string;
-  category: string;
-  ministry?: string;
-  official_url?: string;
-  apply_url?: string;
-  eligibility?: string;
-  benefits?: string;
-  documents_required?: string;
-  how_to_apply?: string;
-  status?: string;
-  description?: string;
-}
-
 export function ScanPage() {
   const [image, setImage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -45,200 +31,114 @@ export function ScanPage() {
     try {
       const doable = createDoableClient();
       
-      // STEP 1: Analyze image with Microsoft Azure Computer Vision API for OCR
+      // Use Groq Vision directly to analyze the image
       if (imageData) {
-        setStage('Extracting text from image with Azure Computer Vision...');
+        setStage('Analyzing image with AI...');
         
-        const AZURE_VISION_KEY = 'Fl2AbOqkbelMbWe6oGbxZtDVhoND2XOf7o1lExllXkWY9PIYjLEaJQQJ99CGACGhslBXJ3w3AAAFACOGJv24';
-        const AZURE_VISION_ENDPOINT = 'https://internshipvisionapi.cognitiveservices.azure.com';
+        // Extract base64 data from data URL
+        const base64Image = imageData.includes(',') ? imageData.split(',')[1] : imageData;
         
-        // Helper function to convert base64 to Blob
-        const base64ToBlob = (base64: string): Blob => {
-          const byteCharacters = atob(base64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          return new Blob([byteArray], { type: 'image/jpeg' });
-        };
-        
-        try {
-          // Extract base64 data from data URL
-          const base64Image = imageData.includes(',') ? imageData.split(',')[1] : imageData;
-          
-          // Call Azure Computer Vision OCR API
-          const response = await fetch(`${AZURE_VISION_ENDPOINT}/vision/v3.2/ocr?language=unk&detectOrientation=true`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/octet-stream',
-              'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY
-            },
-            body: base64ToBlob(base64Image)
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Azure Vision API error:', response.status, errorText);
-            throw new Error(`Azure Vision API error: ${response.status}`);
-          }
-          
-          const ocrResult = await response.json();
-          console.log('Azure OCR result:', ocrResult);
-          
-          // Extract text from Azure OCR response
-          let extractedText = '';
-          if (ocrResult.regions) {
-            for (const region of ocrResult.regions) {
-              for (const line of region.lines) {
-                for (const word of line.words) {
-                  extractedText += word.text + ' ';
-                }
-                extractedText += '\\n';
-              }
-            }
-          }
-          
-          extractedText = extractedText.trim();
-          console.log('Extracted text from Azure:', extractedText);
-          setExtractedText(extractedText);
-          
-          if (!extractedText) {
-            setResult({
-              is_scam: false,
-              document_type: 'image',
-              extracted_text: '',
-              summary: 'No text found in the image. Try a clearer image.',
-              scam_warnings: [],
-              schemes_found: [],
-              recommendations: ['Try uploading a clearer image with visible text', 'Ensure the document is well-lit and in focus']
-            });
-            setProcessing(false);
-            return;
-          }
-          
-          // STEP 2: Analyze extracted text with Groq for scheme detection
-          setStage('Analyzing extracted text for government schemes...');
-          
-          const analysisPrompt = `You are an expert on Indian government schemes and documents. Analyze this extracted text from an image and identify any government schemes mentioned.
-
-TEXT FROM IMAGE:
-${extractedText}
+        const analysisPrompt = `You are an expert on Indian government schemes and document analysis. Analyze this image and:
+1. Extract ALL text visible in the image
+2. Identify any government schemes or programs mentioned
+3. Determine if the document appears legitimate or suspicious
 
 Return your response as a JSON object with this exact structure (ONLY the JSON, no other text):
 {
   "is_scam": false,
   "document_type": "what type of document is this",
-  "extracted_text": "all the text found",
-  "scam_warnings": ["any warning if suspicious"],
+  "extracted_text": "ALL text transcribed from the image",
+  "scam_warnings": [],
   "schemes_found": [
     {
       "name": "Official scheme name",
-      "category": "education|health|housing|employment|agriculture|women|financial|skill|startup|social",
+      "category": "education|health|housing|employment|agriculture|women|financial|skill|startup|social|general",
       "ministry": "Ministry name",
       "official_url": "official government website URL",
-      "apply_url": "direct apply link if available",
-      "eligibility": "Who can apply for this scheme",
-      "benefits": "What benefits you get from this scheme",
-      "documents_required": "List of documents needed",
-      "how_to_apply": "How to apply step by step",
+      "apply_url": "direct apply link",
+      "eligibility": "Who can apply",
+      "benefits": "What benefits",
+      "documents_required": "Documents needed",
+      "how_to_apply": "How to apply",
       "status": "Active",
-      "description": "Brief description of what this scheme does"
+      "description": "Brief description"
     }
   ],
-  "recommendations": ["helpful tips for the user"]
+  "recommendations": ["tips"]
 }
 
-If NO schemes are found, still return the JSON with empty schemes_found array.`;
+If NO schemes are found, still return the JSON with empty schemes_found array. Extract ALL text visible.`;
 
-          const messages = [
-            {
-              role: 'user',
-              content: [{ type: 'text', text: analysisPrompt }]
-            }
-          ];
-
-          let visionResult;
-          try {
-            console.log('Starting Groq text analysis...');
-            visionResult = await doable.integrations.run('groq', 'chat_completion', {
-              model: 'llama-3.2-11b-vision-preview',
-              messages: messages,
-              temperature: 0.3
-            });
-            console.log('Groq response received:', typeof visionResult, Object.keys(visionResult || {}));
-          } catch (apiErr: any) {
-            console.error('Groq API call failed:', apiErr);
-            console.error('Error type:', typeof apiErr);
-            console.error('Error details:', JSON.stringify(apiErr, Object.getOwnPropertyNames(apiErr)));
-            setError('Failed to connect to AI service: ' + (apiErr?.message || apiErr?.toString() || JSON.stringify(apiErr) || 'Please check your internet connection.'));
-            setProcessing(false);
-            return;
+        let visionResult;
+        try {
+          console.log('Starting Groq vision analysis...');
+          visionResult = await doable.integrations.run('groq', 'chat_completion', {
+            model: 'llama-3.2-11b-vision-preview',
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: analysisPrompt },
+                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
+                ]
+              }
+            ],
+            temperature: 0.3
+          });
+          console.log('Groq response received:', typeof visionResult);
+        } catch (apiErr: any) {
+          console.error('Groq API call failed:', apiErr);
+          setError('Failed to connect to AI service: ' + (apiErr?.message || apiErr?.toString() || 'Please check your internet connection.'));
+          setProcessing(false);
+          return;
+        }
+        
+        console.log('Vision result:', visionResult);
+        
+        if ((visionResult.success !== false && visionResult.data)) {
+          let responseText = '';
+          
+          if (typeof visionResult.data === 'string') {
+            responseText = visionResult.data;
+          } else if (visionResult.data.choices && visionResult.data.choices[0]?.message?.content) {
+            responseText = visionResult.data.choices[0].message.content;
+          } else {
+            responseText = JSON.stringify(visionResult.data);
           }
           
-          console.log('Vision result:', visionResult);
+          setRawResponse(responseText);
           
-          if ((visionResult.success !== false && visionResult.data)) {
-            let responseText = '';
-            
-            if (typeof visionResult.data === 'string') {
-              responseText = visionResult.data;
-            } else if (visionResult.data.choices && visionResult.data.choices[0]?.message?.content) {
-              responseText = visionResult.data.choices[0].message.content;
-            } else {
-              responseText = JSON.stringify(visionResult.data);
-            }
-            
-            setRawResponse(responseText);
-            
-            // Extract JSON from response
-            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              try {
-                const parsed = JSON.parse(jsonMatch[0]);
-                
-                const schemes = parsed.schemes_found || [];
-                const summary = parsed.summary || (schemes.length > 0 
-                  ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''} in the image!` 
-                  : 'No government schemes detected in this image');
-                
-                setResult({
-                  is_scam: parsed.is_scam || false,
-                  document_type: parsed.document_type || 'image',
-                  extracted_text: extractedText,
-                  summary: summary,
-                  scam_warnings: parsed.scam_warnings || [],
-                  schemes_found: schemes,
-                  recommendations: parsed.recommendations || []
-                });
-                
-                setExtractedText(extractedText);
-                setProcessing(false);
-                return;
-              } catch (parseErr) {
-                console.error('JSON parse error:', parseErr);
-                // Try to extract just the text
-                setExtractedText(responseText);
-                setResult({
-                  is_scam: false,
-                  document_type: 'image',
-                  extracted_text: responseText,
-                  summary: 'Analysis complete - review the extracted content below',
-                  scam_warnings: [],
-                  schemes_found: [],
-                  recommendations: []
-                });
-                setProcessing(false);
-                return;
-              }
-            } else {
-              // No JSON found - show raw response
+          // Extract JSON from response
+          const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[0]);
+              const schemes = parsed.schemes_found || [];
+              const summary = parsed.summary || (schemes.length > 0 
+                ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''} in the image!` 
+                : 'Analysis complete - no government schemes detected');
+              
+              setResult({
+                is_scam: parsed.is_scam || false,
+                document_type: parsed.document_type || 'image',
+                extracted_text: parsed.extracted_text || responseText,
+                summary: summary,
+                scam_warnings: parsed.scam_warnings || [],
+                schemes_found: schemes,
+                recommendations: parsed.recommendations || []
+              });
+              
+              setExtractedText(parsed.extracted_text || '');
+              setProcessing(false);
+              return;
+            } catch (parseErr) {
+              console.error('JSON parse error:', parseErr);
               setExtractedText(responseText);
               setResult({
                 is_scam: false,
                 document_type: 'image',
                 extracted_text: responseText,
-                summary: 'Analysis complete - see extracted content below',
+                summary: 'Analysis complete - review the extracted content',
                 scam_warnings: [],
                 schemes_found: [],
                 recommendations: []
@@ -247,27 +147,30 @@ If NO schemes are found, still return the JSON with empty schemes_found array.`;
               return;
             }
           } else {
-            // Handle various error formats from the SDK
-            let errorMsg = 'Failed to analyze image. Please try again.';
-            if (visionResult) {
-              errorMsg = (visionResult as any).error?.message 
-                || (visionResult as any).error?.toString()
-                || (visionResult as any).message
-                || visionResult.error
-                || visionResult.message
-                || JSON.stringify(visionResult);
-            }
-            console.error('Vision API error:', errorMsg);
-            console.error('Full vision result:', JSON.stringify(visionResult, null, 2));
-            setError('Image analysis failed: ' + errorMsg);
+            setExtractedText(responseText);
+            setResult({
+              is_scam: false,
+              document_type: 'image',
+              extracted_text: responseText,
+              summary: 'Analysis complete',
+              scam_warnings: [],
+              schemes_found: [],
+              recommendations: []
+            });
+            setProcessing(false);
+            return;
           }
-        } catch (e: any) {
-          console.error('Vision error:', e);
-          setError('Failed to analyze image: ' + (e.message || 'Unknown error. Please try again.'));
+        } else {
+          let errorMsg = 'Failed to analyze image. Please try again.';
+          if (visionResult) {
+            errorMsg = (visionResult as any).error?.message || visionResult.error || JSON.stringify(visionResult);
+          }
+          console.error('Vision API error:', errorMsg);
+          setError('Image analysis failed: ' + errorMsg);
         }
       }
 
-      // STEP 2: If text input is provided, analyze it with Groq
+      // If text input is provided, analyze it with Groq
       if (textData.trim()) {
         setStage('Finding schemes in text...');
         
@@ -279,8 +182,8 @@ ${textData}
 Return your response as a JSON object:
 {
   "is_scam": false,
-  "document_type": "what type of document",
-  "extracted_text": "key text found",
+  "document_type": "text",
+  "extracted_text": "the text analyzed",
   "scam_warnings": [],
   "schemes_found": [
     {
@@ -290,70 +193,53 @@ Return your response as a JSON object:
       "official_url": "official website",
       "apply_url": "apply link",
       "eligibility": "Who can apply",
-      "benefits": "What you get",
+      "benefits": "Benefits",
       "documents_required": "Documents needed",
-      "how_to_apply": "Application process",
+      "how_to_apply": "How to apply",
       "status": "Active",
       "description": "Brief description"
     }
   ],
-  "recommendations": ["advice"]
+  "recommendations": ["tips"]
 }`;
 
         try {
-          const res = await doable.integrations.run('groq', 'custom_api_call', {
-            url: 'https://api.groq.com/openai/v1/chat/completions',
-            method: 'POST',
-            
-            body: {
-              model: 'llama-3.2-11b-vision-preview',
-              messages: [{ role: 'user', content: analysisPrompt }],
-              temperature: 0.3
-            },
-            body_type: 'json'
+          const visionResult = await doable.integrations.run('groq', 'chat_completion', {
+            model: 'llama-3.2-11b-vision-preview',
+            messages: [{ role: 'user', content: analysisPrompt }],
+            temperature: 0.3
           });
           
-          if ((res.success !== false && res.data)) {
+          if (visionResult.success !== false && visionResult.data) {
             let responseText = '';
-            
-            if (typeof res.data === 'string') {
-              responseText = res.data;
-            } else if (res.data.choices && res.data.choices[0]?.message?.content) {
-              responseText = res.data.choices[0].message.content;
+            if (typeof visionResult.data === 'string') {
+              responseText = visionResult.data;
+            } else if (visionResult.data.choices && visionResult.data.choices[0]?.message?.content) {
+              responseText = visionResult.data.choices[0].message.content;
             } else {
-              responseText = JSON.stringify(res.data);
+              responseText = JSON.stringify(visionResult.data);
             }
             
-            const match = responseText.match(/\{[\s\S]*\}/);
-            if (match) {
-              const parsed = JSON.parse(match[0]);
+            setRawResponse(responseText);
+            
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
               const schemes = parsed.schemes_found || [];
-              
               setResult({
                 is_scam: parsed.is_scam || false,
                 document_type: parsed.document_type || 'text',
-                extracted_text: parsed.extracted_text || textData,
+                extracted_text: textData,
                 summary: schemes.length > 0 
-                  ? `Found ${schemes.length} scheme${schemes.length > 1 ? 's' : ''}!` 
-                  : 'No government schemes found in the text',
+                  ? `Found ${schemes.length} government scheme${schemes.length > 1 ? 's' : ''}!` 
+                  : 'No government schemes detected',
                 scam_warnings: parsed.scam_warnings || [],
                 schemes_found: schemes,
                 recommendations: parsed.recommendations || []
               });
-              setProcessing(false);
-              return;
+              setExtractedText(textData);
             }
           }
-          
-          setResult({
-            is_scam: false,
-            document_type: 'text',
-            extracted_text: textData,
-            summary: 'Could not analyze text. Please try again.',
-            scam_warnings: [],
-            schemes_found: [],
-            recommendations: []
-          });
         } catch (e: any) {
           console.error('Text analysis error:', e);
           setError('Failed to analyze text: ' + (e.message || 'Unknown error'));
@@ -370,55 +256,41 @@ Return your response as a JSON object:
         schemes_found: [],
         recommendations: []
       });
-    } finally {
-      setProcessing(false);
-      setStage('');
     }
+    
+    setProcessing(false);
   }
 
-  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
     if (!file.type.startsWith('image/')) {
       setError('Please upload an image file');
       return;
     }
-    
+    setError('');
+    setResult(null);
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setImage(base64);
-      setResult(null);
-      setError('');
-      setSaveSuccess('');
-    };
-    reader.onerror = () => {
-      setError('Failed to load image');
-    };
+    reader.onload = (event) => setImage(event.target?.result as string);
+    reader.onerror = () => setError('Failed to load image');
     reader.readAsDataURL(file);
-  }
+  };
 
-  function handleDrop(e: React.DragEvent) {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (!file || !file.type.startsWith('image/')) {
       setError('Please drop an image file');
       return;
     }
-    
+    setError('');
+    setResult(null);
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setImage(base64);
-      setResult(null);
-      setError('');
-      setSaveSuccess('');
-    };
+    reader.onload = (event) => setImage(event.target?.result as string);
     reader.readAsDataURL(file);
-  }
+  };
 
-  async function handleAnalyze() {
+  const handleAnalyze = () => {
     if (mode === 'image' && !image) {
       setError('Please upload an image first');
       return;
@@ -427,44 +299,25 @@ Return your response as a JSON object:
       setError('Please enter some text first');
       return;
     }
-    
-    await analyzeWithAI(mode === 'image' ? image : null, mode === 'text' ? textInput : '');
-  }
+    setError('');
+    analyzeWithAI(mode === 'image' ? image : null, mode === 'text' ? textInput : '');
+  };
 
-  async function handleSave() {
-    if (!result) return;
+  const handleSave = async () => {
+    if (!result) {
+      setError('Nothing to save');
+      return;
+    }
     setSaving(true);
     setError('');
+    setSaveSuccess('');
     try {
-      const schemeCount = result.schemes_found?.length || 0;
-      const title = schemeCount > 0 
-        ? `Scan: ${schemeCount} scheme(s) found`
-        : `Scan: ${result.document_type || 'Document'} analyzed`;
-      
-      const description = result.summary || result.extracted_text?.substring(0, 200) || 'Analyzed document';
-      
       const r = await db.query(
-        `INSERT INTO vault_items (title, description, category, item_type, metadata) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [
-          title,
-          description,
-          'scan',
-          'scan_result',
-          JSON.stringify({
-            extracted_text: result.extracted_text,
-            schemes_found: result.schemes_found,
-            is_scam: result.is_scam,
-            scam_warnings: result.scam_warnings,
-            recommendations: result.recommendations,
-            document_type: result.document_type,
-            saved_at: new Date().toISOString()
-          })
-        ]
+        `INSERT INTO vault (image_data, result_data, document_type, summary) VALUES ($1, $2, $3, $4)`,
+        [image || null, JSON.stringify(result), result.document_type || 'unknown', result.summary || '']
       );
-      
       if (r.ok) {
-        setSaveSuccess('Saved to Vault!');
+        setSaveSuccess('Saved to vault successfully!');
         setTimeout(() => setSaveSuccess(''), 3000);
       } else {
         setError('Save failed: ' + (r.error?.message || 'Database error'));
@@ -472,317 +325,174 @@ Return your response as a JSON object:
     } catch (e: any) {
       console.error('Save failed:', e);
       setError('Save failed: ' + (e.message || 'Unknown error'));
-    } finally {
-      setSaving(false);
     }
-  }
-
-  const toggleScheme = (index: number) => {
-    setExpandedScheme(expandedScheme === index ? null : index);
+    setSaving(false);
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFBFC]">
-      <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-4 pt-12 pb-6">
-        <h1 className="text-xl font-bold text-white mb-1">AI Document Scanner</h1>
-        <p className="text-white/70 text-sm">Upload any document to find applicable schemes</p>
-      </div>
-
-      <div className="p-4 space-y-4">
-        {/* Mode Toggle */}
-        <div className="bg-white rounded-2xl p-1 shadow-sm flex">
-          <button
-            onClick={() => setMode('image')}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
-              mode === 'image' 
-                ? 'bg-[#1B3A6B] text-white shadow-md' 
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            <Camera className="w-4 h-4 inline mr-2" />
-            Image
-          </button>
-          <button
-            onClick={() => setMode('text')}
-            className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
-              mode === 'text' 
-                ? 'bg-[#1B3A6B] text-white shadow-md' 
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            <FileText className="w-4 h-4 inline mr-2" />
-            Text
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Scan & Analyze</h1>
+          <button onClick={() => navigate('/chat')} className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 rounded-lg border hover:bg-gray-50">
+            <MessageCircle className="w-5 h-5" /> AI Chat
           </button>
         </div>
 
-        {/* Image Upload */}
-        {mode === 'image' && (
-          <div
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className="relative"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-            
-            {image ? (
-              <div className="relative">
-                <img 
-                  src={image} 
-                  alt="Uploaded" 
-                  className="w-full h-64 object-cover rounded-2xl shadow-sm" 
-                />
-                <button
-                  onClick={() => { setImage(null); setResult(null); setError(''); setRawResponse(''); }}
-                  className="absolute top-2 right-2 p-2 bg-black/50 rounded-full text-white hover:bg-black/70"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            ) : (
-              <div 
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center hover:border-[#1B3A6B] hover:bg-[#1B3A6B]/5 transition-all cursor-pointer"
-              >
-                <Upload className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-600 font-medium mb-1">Tap to upload or drag & drop</p>
-                <p className="text-gray-400 text-sm">Screenshot, photo of document, form, or notice</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Text Input */}
-        {mode === 'text' && (
-          <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <textarea
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Paste document text, scheme name, or any government program details here..."
-              className="w-full h-40 p-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-[#1B3A6B]/20 focus:border-[#1B3A6B] text-sm"
-            />
-          </div>
-        )}
-
-        {/* Error Message */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-red-700 font-medium text-sm">Error</p>
-              <p className="text-red-600 text-sm">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Analyze Button */}
-        <button
-          onClick={handleAnalyze}
-          disabled={processing || (mode === 'image' ? !image : !textInput.trim())}
-          className="w-full py-4 bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] text-white rounded-2xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-[#1B3A6B]/20"
-        >
-          {processing ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              {stage || 'Analyzing...'}
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5" />
-              Analyze with AI
-            </>
-          )}
-        </button>
-
-        {/* Results */}
-        {processing && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
-            <div className="w-16 h-16 border-4 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-gray-600 font-medium">{stage || 'Analyzing your document...'}</p>
-            <p className="text-gray-400 text-sm mt-1">This may take a few moments</p>
-          </div>
-        )}
-
-        {/* Scam Warning */}
-        {result && !processing && result.is_scam && (
-          <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="font-bold text-red-800">Scam Alert!</h3>
-                <p className="text-red-600 text-sm">This appears to be a fraud scheme</p>
-              </div>
-            </div>
-            {result.scam_warnings?.length > 0 && (
-              <ul className="text-sm text-red-700 space-y-1 ml-3">
-                {result.scam_warnings.map((warning: string, i: number) => (
-                  <li key={i}>⚠️ {warning}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* Summary */}
-        {result && !processing && (
-          <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle className="w-5 h-5 text-green-600" />
-              <h3 className="font-semibold text-gray-800">Analysis Complete</h3>
-            </div>
-            <p className="text-gray-600 text-sm">{result.summary}</p>
-            {result.document_type && result.document_type !== 'image' && (
-              <p className="text-xs text-gray-400 mt-1">Document type: {result.document_type}</p>
-            )}
-          </div>
-        )}
-
-        {/* Schemes Found */}
-        {result && !processing && result.schemes_found?.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-              <FileCheck className="w-5 h-5 text-[#1B3A6B]" />
-              Schemes Found ({result.schemes_found.length})
-            </h3>
-            
-            {result.schemes_found.map((scheme: any, index: number) => (
-              <div key={index} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                <button
-                  onClick={() => toggleScheme(index)}
-                  className="w-full p-4 text-left hover:bg-gray-50 transition"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-gray-800 mb-1">{scheme.name}</h4>
-                      <span className="inline-block px-2 py-0.5 bg-[#1B3A6B]/10 text-[#1B3A6B] text-xs rounded-full capitalize">
-                        {scheme.category}
-                      </span>
-                    </div>
-                    {expandedScheme === index ? (
-                      <ChevronUp className="w-5 h-5 text-gray-400" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
-                    )}
-                  </div>
-                </button>
-                
-                {expandedScheme === index && (
-                  <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-3">
-                    {scheme.description && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Description</p>
-                        <p className="text-sm text-gray-700">{scheme.description}</p>
-                      </div>
-                    )}
-                    
-                    {scheme.eligibility && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Eligibility</p>
-                        <p className="text-sm text-gray-700">{scheme.eligibility}</p>
-                      </div>
-                    )}
-                    
-                    {scheme.benefits && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Benefits</p>
-                        <p className="text-sm text-gray-700">{scheme.benefits}</p>
-                      </div>
-                    )}
-                    
-                    {scheme.documents_required && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Documents Needed</p>
-                        <p className="text-sm text-gray-700">{scheme.documents_required}</p>
-                      </div>
-                    )}
-                    
-                    {scheme.how_to_apply && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">How to Apply</p>
-                        <p className="text-sm text-gray-700">{scheme.how_to_apply}</p>
-                      </div>
-                    )}
-                    
-                    <div className="flex gap-2 pt-2">
-                      {scheme.official_url && (
-                        <a href={scheme.official_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2.5 px-3 bg-gray-100 text-gray-700 rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-gray-200 transition">
-                          <ExternalLink className="w-4 h-4" /> Official Site
-                        </a>
-                      )}
-                      {scheme.apply_url && (
-                        <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex-1 py-2.5 px-3 bg-green-600 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:bg-green-700 transition">
-                          Apply Now <ExternalLink className="w-4 h-4" />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* No schemes found message */}
-        {result && !processing && result.schemes_found?.length === 0 && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Search className="w-8 h-8 text-gray-400" />
-            </div>
-            <h3 className="font-semibold text-gray-800 text-lg mb-2">No Schemes Found</h3>
-            <p className="text-sm text-gray-500 mb-4">{result.summary}</p>
-            {result.extracted_text && (
-              <details className="text-left mt-4">
-                <summary className="cursor-pointer text-sm text-[#1B3A6B] font-medium">View what was read from image</summary>
-                <p className="mt-2 text-xs text-gray-600 bg-gray-50 p-3 rounded-xl whitespace-pre-wrap">{result.extracted_text}</p>
-              </details>
-            )}
-            <p className="text-xs text-gray-400 mt-4">Try uploading a different image or browse schemes manually</p>
-          </div>
-        )}
-
-        {/* Extracted Text - Full Display */}
-        {result && !processing && result.extracted_text && result.schemes_found?.length === 0 && (
-          <details className="bg-white rounded-2xl shadow-sm border border-gray-100">
-            <summary className="p-4 cursor-pointer font-medium text-gray-700 flex items-center gap-2 hover:bg-gray-50">
-              <Eye className="w-4 h-4" /> View Extracted Text
-            </summary>
-            <div className="px-4 pb-4">
-              <p className="text-sm text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-xl">{result.extracted_text}</p>
-            </div>
-          </details>
-        )}
-
-        {/* Recommendations */}
-        {result && !processing && result.recommendations?.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-            <h3 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
-              <MessageCircle className="w-4 h-4" /> Tips
-            </h3>
-            <ul className="text-sm text-blue-700 space-y-1">
-              {result.recommendations.map((tip: string, i: number) => (
-                <li key={i}>• {tip}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Save Button */}
-        {result && !processing && (
-          <button onClick={handleSave} disabled={saving} className="w-full py-3 bg-green-600 text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2">
-            {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-            {saving ? 'Saving...' : 'Save to Vault'}
+        <div className="bg-white rounded-xl shadow-sm p-1.5 mb-4 flex">
+          <button onClick={() => setMode('image')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium ${mode === 'image' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+            <Camera className="w-5 h-5" /> Image
           </button>
+          <button onClick={() => setMode('text')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-medium ${mode === 'text' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+            <FileText className="w-5 h-5" /> Text
+          </button>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-4">
+          {mode === 'image' ? (
+            <div onDrop={handleDrop} onDragOver={(e) => e.preventDefault()} className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+              {image ? (
+                <div className="relative">
+                  <img src={image} alt="Uploaded" className="max-h-64 mx-auto rounded-lg shadow-md" />
+                  <button onClick={(e) => { e.stopPropagation(); setImage(null); setResult(null); setError(''); }} className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Upload className="w-8 h-8 text-indigo-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Drop your image here</h3>
+                  <p className="text-gray-500 text-sm">or click to browse</p>
+                </>
+              )}
+            </div>
+          ) : (
+            <textarea value={textInput} onChange={(e) => setTextInput(e.target.value)} placeholder="Paste text about government schemes here..." className="w-full h-48 p-4 border border-gray-300 rounded-xl resize-none focus:ring-2 focus:ring-indigo-500" />
+          )}
+
+          <button onClick={handleAnalyze} disabled={processing} className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center gap-2">
+            {processing ? <><Loader2 className="w-5 h-5 animate-spin" /> {stage || 'Analyzing...'}</> : <><Sparkles className="w-5 h-5" /> Analyze {mode === 'image' ? 'Image' : 'Text'}</>}
+          </button>
+
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-700 font-medium text-sm">Error</p>
+                <p className="text-red-600 text-sm">{error}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {result && (
+          <div className="bg-white rounded-xl shadow-sm p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Analysis Results</h2>
+              <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded-lg">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saveSuccess ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                {saveSuccess || (saving ? 'Saving...' : 'Save to Vault')}
+              </button>
+            </div>
+
+            <div className={`p-4 rounded-xl border ${result.is_scam ? 'bg-red-50 border-red-200' : result.schemes_found?.length > 0 ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-start gap-3">
+                {result.is_scam ? <AlertTriangle className="w-6 h-6 text-red-600" /> : result.schemes_found?.length > 0 ? <CheckCircle className="w-6 h-6 text-green-600" /> : <FileCheck className="w-6 h-6 text-gray-600" />}
+                <div>
+                  <h3 className="font-semibold text-gray-900">{result.summary}</h3>
+                  <p className="text-sm text-gray-600 mt-1">Document type: <span className="font-medium">{result.document_type}</span></p>
+                </div>
+              </div>
+            </div>
+
+            {result.scam_warnings?.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <h4 className="font-semibold text-amber-900 flex items-center gap-2 mb-2"><AlertTriangle className="w-5 h-5" /> Scam Warnings</h4>
+                <ul className="list-disc list-inside text-sm text-amber-800 space-y-1">
+                  {result.scam_warnings.map((warning: string, i: number) => (<li key={i}>{warning}</li>))}
+                </ul>
+              </div>
+            )}
+
+            {result.extracted_text && (
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2"><Eye className="w-5 h-5" /> Extracted Text</h4>
+                <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">{result.extracted_text}</div>
+              </div>
+            )}
+
+            {result.schemes_found?.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><Search className="w-5 h-5" /> Government Schemes Detected ({result.schemes_found.length})</h4>
+                <div className="space-y-3">
+                  {result.schemes_found.map((scheme: any, index: number) => (
+                    <div key={index} className="border border-gray-200 rounded-xl overflow-hidden">
+                      <button onClick={() => setExpandedScheme(expandedScheme === index ? null : index)} className="w-full p-4 flex items-center justify-between hover:bg-gray-50">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${scheme.category === 'education' ? 'bg-blue-100' : scheme.category === 'health' ? 'bg-red-100' : scheme.category === 'financial' ? 'bg-green-100' : scheme.category === 'women' ? 'bg-pink-100' : 'bg-indigo-100'}`}>
+                            <FileCheck className={`w-5 h-5 ${scheme.category === 'education' ? 'text-blue-600' : scheme.category === 'health' ? 'text-red-600' : scheme.category === 'financial' ? 'text-green-600' : scheme.category === 'women' ? 'text-pink-600' : 'text-indigo-600'}`} />
+                          </div>
+                          <div className="text-left">
+                            <h5 className="font-semibold text-gray-900">{scheme.name}</h5>
+                            <p className="text-sm text-gray-500">{scheme.category} • {scheme.ministry || 'Government of India'}</p>
+                          </div>
+                        </div>
+                        {expandedScheme === index ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                      </button>
+                      {expandedScheme === index && (
+                        <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-3">
+                          {scheme.description && <div><span className="text-xs font-semibold text-gray-500 uppercase">Description</span><p className="text-sm text-gray-700 mt-1">{scheme.description}</p></div>}
+                          {scheme.eligibility && <div><span className="text-xs font-semibold text-gray-500 uppercase">Eligibility</span><p className="text-sm text-gray-700 mt-1">{scheme.eligibility}</p></div>}
+                          {scheme.benefits && <div><span className="text-xs font-semibold text-gray-500 uppercase">Benefits</span><p className="text-sm text-gray-700 mt-1">{scheme.benefits}</p></div>}
+                          {scheme.documents_required && <div><span className="text-xs font-semibold text-gray-500 uppercase">Documents Required</span><p className="text-sm text-gray-700 mt-1">{scheme.documents_required}</p></div>}
+                          {scheme.how_to_apply && <div><span className="text-xs font-semibold text-gray-500 uppercase">How to Apply</span><p className="text-sm text-gray-700 mt-1">{scheme.how_to_apply}</p></div>}
+                          <div className="flex gap-2 pt-2">
+                            {scheme.official_url && <a href={scheme.official_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">Official Website <ExternalLink className="w-4 h-4" /></a>}
+                            {scheme.apply_url && <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">Apply Now <ExternalLink className="w-4 h-4" /></a>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {result.schemes_found?.length === 0 && !result.is_scam && (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4"><Search className="w-8 h-8 text-gray-400" /></div>
+                <h4 className="font-semibold text-gray-900 mb-2">No Schemes Detected</h4>
+                <p className="text-sm text-gray-500">Try uploading a clearer image or different document</p>
+              </div>
+            )}
+
+            {result.recommendations?.length > 0 && (
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-2">Recommendations</h4>
+                <ul className="space-y-2">
+                  {result.recommendations.map((rec: string, i: number) => (<li key={i} className="flex items-start gap-2 text-sm text-gray-700"><CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />{rec}</li>))}
+                </ul>
+              </div>
+            )}
+          </div>
         )}
-        
-        {saveSuccess && (
-          <p className="text-center text-green-600 font-medium text-sm">{saveSuccess}</p>
+
+        {!result && (
+          <div className="mt-6 grid grid-cols-2 gap-4">
+            <button onClick={() => navigate('/schemes')} className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md text-left">
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mb-3"><FileCheck className="w-5 h-5 text-indigo-600" /></div>
+              <h4 className="font-semibold text-gray-900">Browse All Schemes</h4>
+              <p className="text-sm text-gray-500">Explore government programs</p>
+            </button>
+            <button onClick={() => navigate('/chat')} className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md text-left">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mb-3"><MessageCircle className="w-5 h-5 text-green-600" /></div>
+              <h4 className="font-semibold text-gray-900">Ask AI Assistant</h4>
+              <p className="text-sm text-gray-500">Get personalized help</p>
+            </button>
+          </div>
         )}
       </div>
     </div>
