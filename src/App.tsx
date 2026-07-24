@@ -20,6 +20,7 @@ import { RemindersPage } from './pages/RemindersPage';
 import { ScamPage } from './pages/ScamPage';
 import { FamilyPage } from './pages/FamilyPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { MigrationPage } from './pages/MigrationPage';
 
 // Bottom Navigation Items
 const NAV_ITEMS = [
@@ -199,6 +200,8 @@ function PageRouter({ currentPath }: { currentPath: string }) {
       return <FamilyPage />;
     case '/settings':
       return <SettingsPage />;
+    case '/migrate':
+      return <MigrationPage />;
     case '/auth':
       return <AuthPage />;
     default:
