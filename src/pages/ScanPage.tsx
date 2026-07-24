@@ -613,9 +613,24 @@ export function ScanPage() {
     setError('');
     setSaveSuccess('');
     try {
+      const metadata = {
+        extracted_text: result.extracted_text || '',
+        schemes_found: result.schemes_found || [],
+        scam_warnings: result.scam_warnings || [],
+        recommendations: result.recommendations || [],
+        document_type: result.document_type || 'unknown',
+        is_scam: result.is_scam || false,
+      };
       const r = await db.query(
-        'INSERT INTO vault (image_data, result_data, document_type, summary) VALUES ($1, $2, $3, $4)',
-        [image || null, JSON.stringify(result), result.document_type || 'unknown', result.summary || '']
+        `INSERT INTO vault_items (title, description, category, item_type, metadata)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          result.summary || 'Scanned Document',
+          result.extracted_text?.substring(0, 200) || '',
+          result.document_type || 'document',
+          'scan_result',
+          JSON.stringify(metadata)
+        ]
       );
       if (r.ok) {
         setSaveSuccess('Saved successfully!');
