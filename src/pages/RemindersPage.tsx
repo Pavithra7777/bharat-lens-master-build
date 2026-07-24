@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@doable/data';
-import { Calendar, List, Plus, Bell, Check, Trash2 } from 'lucide-react';
+import { useApp } from '../lib/AppContext';
+import { Calendar, List, Plus, Bell, Check, Trash2, Loader2 } from 'lucide-react';
+import { translations } from '../lib/i18n';
 
 interface Reminder {
   id: string;
@@ -13,6 +15,8 @@ interface Reminder {
 }
 
 export function RemindersPage() {
+  const { user, language } = useApp();
+  const t = translations[language || 'en'];
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'calendar'>('list');
@@ -21,9 +25,10 @@ export function RemindersPage() {
   const [newDate, setNewDate] = useState('');
 
   const loadReminders = useCallback(async () => {
+    if (!user) { setLoading(false); return; }
     setLoading(true);
     try {
-      // Query all reminders - RLS handles owner filtering via created_by
+      // Query reminders filtered by current user via RLS
       const r = await db.query<Reminder>(
         'SELECT * FROM reminders ORDER BY due_date ASC'
       );
@@ -35,7 +40,7 @@ export function RemindersPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     loadReminders();
@@ -66,232 +71,227 @@ export function RemindersPage() {
     }
   }
 
-  async function toggleComplete(id: string) {
+  async function toggleComplete(id: string, currentStatus: boolean) {
     try {
-      await db.query(
-        'UPDATE reminders SET is_completed = NOT is_completed WHERE id = $1',
-        [id]
+      const r = await db.query(
+        'UPDATE reminders SET is_completed = $1 WHERE id = $2 RETURNING *',
+        [!currentStatus, id]
       );
-      setReminders(prev => prev.map(r => 
-        r.id === id ? { ...r, is_completed: !r.is_completed } : r
-      ));
+      if (r.ok && r.rows.length > 0) {
+        setReminders(prev =>
+          prev.map(rem =>
+            rem.id === id ? { ...rem, is_completed: !currentStatus } : rem
+          )
+        );
+      }
     } catch (error) {
-      console.error('Toggle failed:', error);
+      console.error('Toggle complete failed:', error);
     }
   }
 
   async function deleteReminder(id: string) {
-    if (!confirm('Delete this reminder?')) return;
     try {
       await db.query('DELETE FROM reminders WHERE id = $1', [id]);
       setReminders(prev => prev.filter(r => r.id !== id));
     } catch (error) {
-      console.error('Delete failed:', error);
+      console.error('Delete reminder failed:', error);
     }
   }
 
-  function getDaysUntil(date: string): number {
-    return Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  }
-
-  function groupByDate(remindersList: Reminder[]) {
-    const groups: Record<string, Reminder[]> = {};
-    remindersList.forEach(r => {
-      const date = r.due_date;
-      if (!groups[date]) groups[date] = [];
-      groups[date].push(r);
-    });
-    return groups;
-  }
-
-  const upcomingReminders = reminders.filter(r => !r.is_completed && new Date(r.due_date) >= new Date());
+  // Group reminders by status
+  const upcomingReminders = reminders.filter(r => !r.is_completed);
   const completedReminders = reminders.filter(r => r.is_completed);
-  const grouped = groupByDate(upcomingReminders);
 
-  return (
-    <div className="min-h-screen bg-[#FAFBFC] pb-24">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-6 pt-12 pb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Reminders</h1>
-            <p className="text-white/70 mt-1">Never miss a deadline</p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setView('list')}
-              className={`w-10 h-10 rounded-lg flex items-center justify-center transition ${
-                view === 'list' ? 'bg-white text-[#1B3A6B]' : 'bg-white/20 text-white'
-              }`}
-            >
-              <List className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setView('calendar')}
-              className={`w-10 h-10 rounded-lg flex items-center justify-center transition ${
-                view === 'calendar' ? 'bg-white text-[#1B3A6B]' : 'bg-white/20 text-white'
-              }`}
-            >
-              <Calendar className="w-5 h-5" />
-            </button>
-          </div>
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const reminderDate = new Date(date);
+    reminderDate.setHours(0, 0, 0, 0);
+
+    if (reminderDate.getTime() === today.getTime()) return 'Today';
+    if (reminderDate.getTime() === tomorrow.getTime()) return 'Tomorrow';
+    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
+  const isOverdue = (dateStr: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return new Date(dateStr) < today;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-[#1B3A6B] animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Loading reminders...</p>
         </div>
       </div>
+    );
+  }
 
-      <div className="px-6 py-6">
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 bg-gray-100 rounded-xl skeleton" />
-            ))}
-          </div>
-        ) : reminders.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Bell className="w-10 h-10 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-[#1A1A2E] mb-2">No reminders yet</h3>
-            <p className="text-gray-500 mb-6">Add reminders for important deadlines</p>
+  return (
+    <div className="min-h-screen bg-[#FAFBFC]">
+      <header className="bg-[#1B3A6B] text-white p-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold">Reminders</h1>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 bg-white/20 px-3 py-2 rounded-lg hover:bg-white/30 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            <span className="text-sm font-medium">Add</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="p-4">
+        {reminders.length === 0 ? (
+          <div className="text-center py-12">
+            <Bell className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-700 mb-2">No Reminders Yet</h2>
+            <p className="text-gray-500 mb-4">Create your first reminder to stay on track</p>
             <button
               onClick={() => setShowAddModal(true)}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium"
+              className="bg-[#1B3A6B] text-white px-6 py-2 rounded-lg font-medium hover:bg-[#2a4a8a] transition-colors"
             >
-              <Plus className="w-4 h-4" />
-              Add Reminder
+              Create Reminder
             </button>
           </div>
         ) : (
-          <>
-            {/* Upcoming */}
-            {Object.entries(grouped).map(([date, items]) => {
-              const days = getDaysUntil(date);
-              return (
-                <div key={date} className="mb-6">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                      days <= 3 ? 'bg-red-100 text-red-600' :
-                      days <= 7 ? 'bg-amber-100 text-amber-600' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
-                      {days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `${days} days`}
-                    </div>
-                    <span className="text-gray-400">
-                      {new Date(date).toLocaleDateString('en-IN', {
-                        weekday: 'long', day: 'numeric', month: 'short'
-                      })}
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {items.map((reminder) => (
-                      <div
-                        key={reminder.id}
-                        className="bg-white rounded-xl p-4 border border-gray-100 flex items-center gap-4"
-                      >
+          <div className="space-y-6">
+            {/* Upcoming Reminders */}
+            {upcomingReminders.length > 0 && (
+              <section>
+                <h2 className="text-lg font-semibold text-[#1A1A2E] mb-3 flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-[#1B3A6B]" />
+                  Upcoming ({upcomingReminders.length})
+                </h2>
+                <div className="space-y-2">
+                  {upcomingReminders.map(reminder => (
+                    <div
+                      key={reminder.id}
+                      className={`bg-white rounded-xl p-4 shadow-sm border-l-4 ${
+                        isOverdue(reminder.due_date) ? 'border-l-red-500' : 'border-l-[#1B3A6B]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
                         <button
-                          onClick={() => toggleComplete(reminder.id)}
-                          className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition ${
+                          onClick={() => toggleComplete(reminder.id, reminder.is_completed)}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
                             reminder.is_completed
-                              ? 'bg-[#0F9D58] border-[#0F9D58]'
+                              ? 'bg-green-500 border-green-500 text-white'
                               : 'border-gray-300 hover:border-[#1B3A6B]'
                           }`}
                         >
-                          {reminder.is_completed && <Check className="w-4 h-4 text-white" />}
+                          {reminder.is_completed && <Check className="w-4 h-4" />}
                         </button>
                         <div className="flex-1">
-                          <p className={`font-medium ${reminder.is_completed ? 'line-through text-gray-400' : 'text-[#1A1A2E]'}`}>
+                          <p className={`font-medium ${isOverdue(reminder.due_date) ? 'text-red-600' : 'text-[#1A1A2E]'}`}>
                             {reminder.title}
+                          </p>
+                          <p className={`text-sm ${isOverdue(reminder.due_date) ? 'text-red-400' : 'text-gray-500'}`}>
+                            {formatDate(reminder.due_date)}
+                            {isOverdue(reminder.due_date) && ' • Overdue'}
                           </p>
                         </div>
                         <button
                           onClick={() => deleteReminder(reminder.id)}
-                          className="w-8 h-8 text-gray-400 hover:text-red-500"
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-5 h-5" />
                         </button>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Completed */}
-            {completedReminders.length > 0 && (
-              <div>
-                <h3 className="font-semibold text-gray-400 mb-3">Completed</h3>
-                <div className="space-y-2">
-                  {completedReminders.map((reminder) => (
-                    <div
-                      key={reminder.id}
-                      className="bg-gray-50 rounded-xl p-4 flex items-center gap-4 opacity-60"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-[#0F9D58] flex items-center justify-center">
-                        <Check className="w-4 h-4 text-white" />
-                      </div>
-                      <p className="flex-1 line-through text-gray-400">{reminder.title}</p>
-                      <button
-                        onClick={() => deleteReminder(reminder.id)}
-                        className="w-8 h-8 text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
             )}
-          </>
+
+            {/* Completed Reminders */}
+            {completedReminders.length > 0 && (
+              <section>
+                <h2 className="text-lg font-semibold text-gray-500 mb-3 flex items-center gap-2">
+                  <Check className="w-5 h-5" />
+                  Completed ({completedReminders.length})
+                </h2>
+                <div className="space-y-2">
+                  {completedReminders.map(reminder => (
+                    <div
+                      key={reminder.id}
+                      className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-l-gray-300 opacity-60"
+                    >
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => toggleComplete(reminder.id, reminder.is_completed)}
+                          className="w-6 h-6 rounded-full border-2 bg-green-500 border-green-500 text-white flex items-center justify-center"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-500 line-through">{reminder.title}</p>
+                          <p className="text-sm text-gray-400">
+                            {formatDate(reminder.due_date)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => deleteReminder(reminder.id)}
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
         )}
       </div>
 
-      {/* FAB */}
-      <button 
-        onClick={() => setShowAddModal(true)}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-[#FF7A00] text-white rounded-full shadow-lg flex items-center justify-center"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
-
-      {/* Add Modal */}
+      {/* Add Reminder Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
-          <div className="bg-white rounded-t-3xl w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-[#1A1A2E]">Add Reminder</h2>
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"
-              >
-                ✕
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-[#1A1A2E] mb-4">New Reminder</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
                 <input
                   type="text"
                   value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="e.g., Aadhaar card renewal"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[#1B3A6B]"
+                  onChange={e => setNewTitle(e.target.value)}
+                  placeholder="e.g., Submit application for PM Kisan"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#1B3A6B] focus:ring-2 focus:ring-[#1B3A6B]/20 outline-none transition-all"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Due Date</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
                 <input
                   type="date"
                   value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-[#1B3A6B]"
+                  onChange={e => setNewDate(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#1B3A6B] focus:ring-2 focus:ring-[#1B3A6B]/20 outline-none transition-all"
                 />
               </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
               <button
                 onClick={addReminder}
                 disabled={!newTitle.trim() || !newDate}
-                className="w-full py-4 bg-[#1B3A6B] text-white rounded-xl font-medium disabled:opacity-50"
+                className="flex-1 px-4 py-3 rounded-xl bg-[#1B3A6B] text-white font-medium hover:bg-[#2a4a8a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Add Reminder
+                Save
               </button>
             </div>
           </div>

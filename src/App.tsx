@@ -175,8 +175,7 @@ function AppContent() {
 function PageRouter({ currentPath }: { currentPath: string }) {
   // Handle scheme detail route
   if (currentPath.startsWith('/schemes/') && currentPath.length > 9) {
-    const schemeId = currentPath.slice(9);
-    return <SchemeDetailPage schemeId={schemeId} />;
+    return <SchemeDetailPage />;
   }
 
   switch (currentPath) {
