@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { Link } from '../lib/Router';
-import { FolderOpen, FileText, CreditCard, Car, Home, Trash2, Eye, Calendar, IdCard, Sparkles, AlertTriangle, FileCheck, ExternalLink } from 'lucide-react';
+import { FolderOpen, FileText, CreditCard, Car, Home, Trash2, Eye, Calendar, IdCard, Sparkles, AlertTriangle, FileCheck, ExternalLink, Info } from 'lucide-react';
 
-interface VaultItem {
+interface vaultItem {
   id: string;
   title: string;
   description: string | null;
@@ -14,11 +14,22 @@ interface VaultItem {
   created_at: string;
 }
 
+// Helper function to check if a string is a valid URL
+function isValidUrl(string: string): boolean {
+  if (!string) return false;
+  try {
+    const url = new URL(string);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function VaultPage() {
-  const [items, setItems] = useState<VaultItem[]>([]);
+  const [items, setItems] = useState<vaultItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'grid' | 'list'>('grid');
-  const [selectedItem, setSelectedItem] = useState<VaultItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<vaultItem | null>(null);
   const { profile } = useApp();
 
   useEffect(() => {
@@ -29,7 +40,7 @@ export function VaultPage() {
     setLoading(true);
     try {
       // Query vault_items - RLS handles owner filtering via created_by
-      const r = await db.query<VaultItem>(
+      const r = await db.query<vaultItem>(
         `SELECT id, title, description, category, item_type, metadata, created_at 
          FROM vault_items ORDER BY created_at DESC`
       );
@@ -55,7 +66,7 @@ export function VaultPage() {
     }
   }
 
-  function getItemIcon(item: VaultItem) {
+  function getItemIcon(item: vaultItem) {
     if (item.item_type === 'scan_result') {
       const meta = item.metadata || {};
       if (meta.is_scam) return AlertTriangle;
@@ -74,7 +85,7 @@ export function VaultPage() {
     }
   }
 
-  function getItemColor(item: VaultItem) {
+  function getItemColor(item: vaultItem) {
     if (item.item_type === 'scan_result') {
       const meta = item.metadata || {};
       if (meta.is_scam) return 'bg-red-100 text-red-600';
@@ -84,7 +95,7 @@ export function VaultPage() {
     return 'bg-[#1B3A6B]/10 text-[#1B3A6B]';
   }
 
-  function getSchemeCount(item: VaultItem): number {
+  function getSchemeCount(item: vaultItem): number {
     if (item.item_type === 'scan_result' && item.metadata?.schemes_found) {
       return item.metadata.schemes_found.length;
     }
@@ -252,11 +263,41 @@ export function VaultPage() {
                             <h4 className="font-semibold text-gray-900">{scheme.name}</h4>
                             {scheme.ministry && <p className="text-sm text-gray-500 mt-1">{scheme.ministry}</p>}
                             {scheme.benefits && <p className="text-sm text-gray-600 mt-2">{scheme.benefits}</p>}
+                            {scheme.eligibility && <p className="text-sm text-gray-500 mt-2">Eligibility: {scheme.eligibility}</p>}
+                            
+                            {/* Apply Link - Fixed to handle both URLs and text instructions */}
                             {scheme.apply_url && (
-                              <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" 
-                                 className="inline-flex items-center gap-1 mt-2 text-sm text-blue-600 hover:underline">
-                                Apply Now <ExternalLink className="w-3 h-3" />
-                              </a>
+                              <div className="mt-3">
+                                {isValidUrl(scheme.apply_url) ? (
+                                  <a 
+                                    href={scheme.apply_url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                                  >
+                                    Apply Now <ExternalLink className="w-4 h-4" />
+                                  </a>
+                                ) : (
+                                  <div className="inline-flex items-start gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                                    <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                                    <span className="text-blue-800">{scheme.apply_url}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Official URL - also check for valid URL */}
+                            {scheme.official_url && isValidUrl(scheme.official_url) && (
+                              <div className="mt-2">
+                                <a 
+                                  href={scheme.official_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 hover:underline"
+                                >
+                                  <ExternalLink className="w-3 h-3" /> Official Website
+                                </a>
+                              </div>
                             )}
                           </div>
                         ))}

@@ -12,6 +12,7 @@ interface Reminder {
   related_document_id: string | null;
   related_application_id: string | null;
   created_at: string;
+  created_by: string;
 }
 
 export function RemindersPage() {
@@ -28,9 +29,10 @@ export function RemindersPage() {
     if (!user) { setLoading(false); return; }
     setLoading(true);
     try {
-      // Query reminders filtered by current user via RLS
+      // Query reminders filtered by current user via created_by
       const r = await db.query<Reminder>(
-        'SELECT * FROM reminders ORDER BY due_date ASC'
+        'SELECT * FROM reminders WHERE created_by = $1 ORDER BY due_date ASC',
+        [user.id]
       );
       if (r.ok && r.rows) {
         setReminders(r.rows);
