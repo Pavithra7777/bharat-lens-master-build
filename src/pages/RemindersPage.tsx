@@ -53,8 +53,8 @@ export function RemindersPage() {
     
     try {
       const r = await db.query<Reminder>(
-        'INSERT INTO reminders (title, due_date) VALUES ($1, $2) RETURNING *',
-        [newTitle.trim(), newDate]
+        'INSERT INTO reminders (title, due_date, created_by) VALUES ($1, $2, $3) RETURNING *',
+        [newTitle.trim(), newDate, user?.id]
       );
       if (r.ok && r.rows.length > 0 && r.rows[0]) {
         const newReminder = r.rows[0];

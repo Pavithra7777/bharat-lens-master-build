@@ -6,6 +6,16 @@ import { db } from '@doable/data';
 const AZURE_VISION_KEY = 'Fl2AbOqkbelMbWe6oGbxZtDVhoND2XOf7o1lExllXkWY9PIYjLEaJQQJ99CGACGhslBXJ3w3AAAFACOGJv24';
 const AZURE_VISION_ENDPOINT = 'https://internshipvisionapi.cognitiveservices.azure.com';
 
+// Helper function to check if a string is a valid URL
+function isValidUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 interface SchemeInfo {
   name: string;
   category: string;
@@ -846,9 +856,16 @@ export function ScanPage() {
                               </a>
                             )}
                             {scheme.apply_url && (
-                              <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors">
-                                <LinkIcon className="w-4 h-4" /> Apply Now <ExternalLink className="w-3 h-3" />
-                              </a>
+                              isValidUrl(scheme.apply_url) ? (
+                                <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors">
+                                  <LinkIcon className="w-4 h-4" /> Apply Now <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                                  <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                  <span className="text-sm text-amber-800">{scheme.apply_url}</span>
+                                </div>
+                              )
                             )}
                           </div>
                         </div>
