@@ -18,11 +18,31 @@ async function resolveUserConfig(env) {
   return cfg ?? {};
 }
 
+
+function doableRewriteUploadsBase() {
+  let base = "/";
+  return {
+    name: "doable-rewrite-uploads-base",
+    apply: "serve",
+    configResolved(cfg) { base = cfg.base || "/"; },
+    transform(code, id) {
+      if (base === "/") return null;
+      const clean = id.split("?")[0];
+      if (!/\.(jsx|tsx|js|ts|mjs|cjs|css|vue|svelte)$/.test(clean)) return null;
+      if (!code.includes("/uploads/")) return null;
+      return { code: code.replace(/(["'`(])\/uploads\//g, "$1" + base + "uploads/"), map: null };
+    },
+  };
+}
+
 export default async (env) => {
   const base = await resolveUserConfig(env);
   const baseServer = base.server ?? {};
   return {
     ...base,
+    // Rebase root-absolute /uploads/ literals onto the preview base path
+    // (dev-serve only; publish builds bypass this wrapper entirely).
+    plugins: [...(base.plugins ?? []), doableRewriteUploadsBase()],
     server: {
       ...baseServer,
       // Platform-owned HMR transport, routed through the API's WebSocket relay.

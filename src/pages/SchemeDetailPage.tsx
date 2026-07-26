@@ -32,6 +32,7 @@ interface Scheme {
   required_documents?: string[];
   application_mode?: string[];
   official_url?: string;
+  apply_url?: string;
   helpline?: string;
   department?: string;
   ministry?: string;
@@ -92,18 +93,37 @@ export function SchemeDetailPage() {
     }
   }
 
+  function isValidUrl(string: string): boolean {
+    if (!string) return false;
+    try {
+      const url = new URL(string);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
   function handleApply() {
-    if (!scheme?.official_url) {
+    // Prefer apply_url; fall back to official_url
+    const rawUrl = scheme?.apply_url || scheme?.official_url;
+
+    if (!rawUrl) {
       alert('No official application link available for this scheme. Please visit the official government portal.');
       return;
     }
-    
-    // Validate URL before opening
-    let url = scheme.official_url;
+
+    // Ensure the URL has a valid protocol
+    let url = rawUrl;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = 'https://' + url;
     }
-    
+
+    // Final validation: reject malformed URLs (e.g., containing spaces or unencoded chars)
+    if (!isValidUrl(url)) {
+      alert('The application link for this scheme appears to be invalid. Please visit the official government portal directly.');
+      return;
+    }
+
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
@@ -364,19 +384,19 @@ export function SchemeDetailPage() {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg">
         <button
           onClick={handleApply}
-          disabled={!scheme.official_url}
+          disabled={!isValidUrl(scheme.apply_url || scheme.official_url || '')}
           className={`w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition ${
-            scheme.official_url
+            isValidUrl(scheme.apply_url || scheme.official_url || '')
               ? 'bg-green-600 hover:bg-green-700 text-white'
               : 'bg-gray-200 text-gray-500 cursor-not-allowed'
           }`}
         >
           <ExternalLink className="w-5 h-5" />
-          {scheme.official_url ? 'Apply on Official Website' : 'No Application Link Available'}
+          {isValidUrl(scheme.apply_url || scheme.official_url || '') ? 'Apply on Official Website' : 'No Application Link Available'}
         </button>
-        {!scheme.official_url && (
+        {!isValidUrl(scheme.apply_url || scheme.official_url || '') && (
           <p className="text-xs text-gray-400 text-center mt-2">
-            Please visit the official government portal to apply
+            Official application link is currently unavailable
           </p>
         )}
       </div>
