@@ -3,7 +3,7 @@ import { useParams, useNavigate } from '../lib/Router';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { translations } from '../lib/i18n';
-import { ArrowLeft, ExternalLink, CheckCircle, FileText, MapPin, Users, Briefcase, Calendar, Phone, Loader2, Shield, Heart, Home, GraduationCap } from 'lucide-react';
+import { ArrowLeft, ExternalLink, CheckCircle, FileText, MapPin, Users, Briefcase, Calendar, Phone, Loader2, Shield, Heart, Home, GraduationCap, Globe } from 'lucide-react';
 
 interface Scheme {
   id: string;
@@ -61,6 +61,7 @@ export function SchemeDetailPage() {
   const [scheme, setScheme] = useState<Scheme | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [linkStatus, setLinkStatus] = useState<'idle' | 'checking' | 'error'>('idle');
   const t = translations[language];
 
   useEffect(() => {
@@ -103,8 +104,16 @@ export function SchemeDetailPage() {
     }
   }
 
-  function handleApply() {
-    // Prefer apply_url; fall back to official_url
+  function getMainDomain(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.origin;
+    } catch {
+      return '';
+    }
+  }
+
+  async function handleApply() {
     const rawUrl = scheme?.apply_url || scheme?.official_url;
 
     if (!rawUrl) {
@@ -112,19 +121,25 @@ export function SchemeDetailPage() {
       return;
     }
 
-    // Ensure the URL has a valid protocol
     let url = rawUrl;
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
       url = 'https://' + url;
     }
 
-    // Final validation: reject malformed URLs (e.g., containing spaces or unencoded chars)
     if (!isValidUrl(url)) {
       alert('The application link for this scheme appears to be invalid. Please visit the official government portal directly.');
       return;
     }
 
-    window.open(url, '_blank', 'noopener,noreferrer');
+    setLinkStatus('checking');
+    const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
+    
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+      setLinkStatus('error');
+      alert('Could not open the application page. Please copy this link and paste it in your browser: ' + url);
+    } else {
+      setLinkStatus('idle');
+    }
   }
 
   function getCategoryIcon(category: string) {
@@ -169,9 +184,11 @@ export function SchemeDetailPage() {
     );
   }
 
+  const applyUrl = scheme.apply_url || scheme.official_url;
+  const mainPortal = applyUrl ? getMainDomain(applyUrl) : '';
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24">
-      {/* Header */}
       <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-5 pt-10 pb-6">
         <button
           onClick={() => navigate('/schemes')}
@@ -202,7 +219,6 @@ export function SchemeDetailPage() {
       </div>
 
       <div className="px-5 py-6 space-y-6">
-        {/* Quick Info */}
         <div className="grid grid-cols-2 gap-3">
           {scheme.department && (
             <div className="bg-white rounded-xl p-4 shadow-sm">
@@ -242,7 +258,6 @@ export function SchemeDetailPage() {
           )}
         </div>
 
-        {/* Description */}
         <div className="bg-white rounded-xl p-5 shadow-sm">
           <h2 className="font-semibold text-[#1A1A2E] mb-3">About This Scheme</h2>
           <p className="text-gray-600 leading-relaxed">{scheme.description}</p>
@@ -255,7 +270,6 @@ export function SchemeDetailPage() {
           )}
         </div>
 
-        {/* Eligibility */}
         <div className="bg-white rounded-xl p-5 shadow-sm">
           <h2 className="font-semibold text-[#1A1A2E] mb-3">Eligibility Criteria</h2>
           <div className="space-y-3">
@@ -327,7 +341,6 @@ export function SchemeDetailPage() {
           </div>
         </div>
 
-        {/* Required Documents */}
         {scheme.required_documents && scheme.required_documents.length > 0 && (
           <div className="bg-white rounded-xl p-5 shadow-sm">
             <h2 className="font-semibold text-[#1A1A2E] mb-3">Required Documents</h2>
@@ -342,7 +355,6 @@ export function SchemeDetailPage() {
           </div>
         )}
 
-        {/* Application Mode */}
         {scheme.application_mode && scheme.application_mode.length > 0 && (
           <div className="bg-white rounded-xl p-5 shadow-sm">
             <h2 className="font-semibold text-[#1A1A2E] mb-3">How to Apply</h2>
@@ -357,7 +369,6 @@ export function SchemeDetailPage() {
           </div>
         )}
 
-        {/* Helpline */}
         {scheme.helpline && (
           <div className="bg-white rounded-xl p-5 shadow-sm">
             <h2 className="font-semibold text-[#1A1A2E] mb-3">Helpline</h2>
@@ -368,7 +379,6 @@ export function SchemeDetailPage() {
           </div>
         )}
 
-        {/* Tags */}
         {scheme.tags && scheme.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {scheme.tags.map((tag, idx) => (
@@ -380,21 +390,52 @@ export function SchemeDetailPage() {
         )}
       </div>
 
-      {/* Bottom Apply Button */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg">
-        <button
-          onClick={handleApply}
-          disabled={!isValidUrl(scheme.apply_url || scheme.official_url || '')}
-          className={`w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition ${
-            isValidUrl(scheme.apply_url || scheme.official_url || '')
-              ? 'bg-green-600 hover:bg-green-700 text-white'
-              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-          }`}
-        >
-          <ExternalLink className="w-5 h-5" />
-          {isValidUrl(scheme.apply_url || scheme.official_url || '') ? 'Apply on Official Website' : 'No Application Link Available'}
-        </button>
-        {!isValidUrl(scheme.apply_url || scheme.official_url || '') && (
+        {isValidUrl(applyUrl || '') ? (
+          <>
+            <button
+              onClick={handleApply}
+              disabled={linkStatus === 'checking'}
+              className={`w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition ${
+                linkStatus === 'checking'
+                  ? 'bg-yellow-500 text-white cursor-wait'
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              {linkStatus === 'checking' ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Opening Link...
+                </>
+              ) : (
+                <>
+                  <ExternalLink className="w-5 h-5" />
+                  Apply on Official Website
+                </>
+              )}
+            </button>
+            {mainPortal && (
+              <a
+                href={mainPortal}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 mt-2 text-sm text-[#1B3A6B] hover:underline"
+              >
+                <Globe className="w-4 h-4" />
+                Or visit main portal: {mainPortal}
+              </a>
+            )}
+          </>
+        ) : (
+          <button
+            disabled
+            className="w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 bg-gray-200 text-gray-500 cursor-not-allowed"
+          >
+            <ExternalLink className="w-5 h-5" />
+            No Application Link Available
+          </button>
+        )}
+        {!isValidUrl(applyUrl || '') && (
           <p className="text-xs text-gray-400 text-center mt-2">
             Official application link is currently unavailable
           </p>
