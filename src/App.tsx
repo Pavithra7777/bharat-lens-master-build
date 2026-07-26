@@ -199,6 +199,8 @@ function PageRouter({ currentPath }: { currentPath: string }) {
       return <FamilyPage />;
     case '/settings':
       return <SettingsPage />;
+    case '/urls':
+      return <UrlReport />;
     case '/migrate':
       return <MigrationPage />;
     case '/auth':
