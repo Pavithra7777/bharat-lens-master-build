@@ -7,7 +7,7 @@ import {
   ArrowLeft, ExternalLink, CheckCircle, FileText, MapPin, Users, 
   Briefcase, Calendar, Phone, Loader2, Shield, Heart, Home, 
   GraduationCap, Globe, Banknote, Clock, Target, Award, ChevronDown,
-  ChevronUp, Info, FileCheck, Building, Globe2
+  ChevronUp, Info, FileCheck, Building, Globe2, Ban
 } from 'lucide-react';
 
 interface Scheme {
@@ -66,7 +66,7 @@ export function SchemeDetailPage() {
   const [scheme, setScheme] = useState<Scheme | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [linkStatus, setLinkStatus] = useState<'idle' | 'checking' | 'error'>('idle');
+  const [linkStatus, setLinkStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     eligibility: true,
     benefits: true,
@@ -94,6 +94,13 @@ export function SchemeDetailPage() {
       );
       if (r.ok && r.rows && r.rows.length > 0) {
         setScheme(r.rows[0] as Scheme);
+        
+        // Check if the apply URL is accessible
+        const applyUrl = r.rows[0]?.apply_url;
+        if (applyUrl) {
+          setLinkStatus('checking');
+          checkUrlAccessibility(applyUrl);
+        }
       } else {
         setError('Scheme not found');
       }
@@ -112,6 +119,25 @@ export function SchemeDetailPage() {
       return url.protocol === 'http:' || url.protocol === 'https:';
     } catch {
       return false;
+    }
+  }
+
+  // Check URL accessibility
+  async function checkUrlAccessibility(url: string): Promise<void> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      await fetch(url, {
+        method: 'HEAD',
+        mode: 'no-cors',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      setLinkStatus('valid');
+    } catch (error) {
+      console.log('URL validation failed:', url);
+      setLinkStatus('invalid');
     }
   }
 
@@ -153,7 +179,7 @@ export function SchemeDetailPage() {
     const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
     
     if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-      setLinkStatus('error');
+      setLinkStatus('invalid');
       alert('Could not open the application page. Please copy this link and paste it in your browser: ' + url);
     } else {
       setLinkStatus('idle');
@@ -643,37 +669,80 @@ export function SchemeDetailPage() {
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg">
         {isValidUrl(applyUrl || '') ? (
           <>
-            <button
-              onClick={handleApply}
-              disabled={linkStatus === 'checking'}
-              className={`w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition ${
-                linkStatus === 'checking'
-                  ? 'bg-yellow-500 text-white cursor-wait'
-                  : 'bg-green-600 hover:bg-green-700 text-white'
-              }`}
-            >
-              {linkStatus === 'checking' ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Opening Link...
-                </>
-              ) : (
-                <>
+            {linkStatus === 'checking' && (
+              <button
+                disabled
+                className="w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition bg-yellow-500 text-white cursor-wait"
+              >
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Checking registration status...
+              </button>
+            )}
+            {linkStatus === 'valid' && (
+              <>
+                <button
+                  onClick={handleApply}
+                  className="w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition bg-green-600 hover:bg-green-700 text-white"
+                >
                   <ExternalLink className="w-5 h-5" />
                   Apply on Official Website
-                </>
-              )}
-            </button>
-            {mainPortal && (
-              <a
-                href={mainPortal}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 mt-2 text-sm text-[#1B3A6B] hover:underline"
-              >
-                <Globe className="w-4 h-4" />
-                Or visit main portal: {mainPortal}
-              </a>
+                </button>
+                {mainPortal && (
+                  <a
+                    href={mainPortal}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 mt-2 text-sm text-[#1B3A6B] hover:underline"
+                  >
+                    <Globe className="w-4 h-4" />
+                    Or visit main portal: {mainPortal}
+                  </a>
+                )}
+              </>
+            )}
+            {linkStatus === 'invalid' && (
+              <div className="space-y-3">
+                <div className="w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 bg-red-100 border border-red-300 text-red-700">
+                  <Ban className="w-5 h-5" />
+                  Registration Closed
+                </div>
+                <p className="text-xs text-gray-500 text-center">
+                  The online application portal is currently unavailable. Please check back later or visit the official website for updates.
+                </p>
+                {mainPortal && (
+                  <a
+                    href={mainPortal}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 text-sm text-[#1B3A6B] hover:underline"
+                  >
+                    <Globe className="w-4 h-4" />
+                    Visit official website for updates
+                  </a>
+                )}
+              </div>
+            )}
+            {linkStatus === 'idle' && (
+              <>
+                <button
+                  onClick={handleApply}
+                  className="w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <ExternalLink className="w-5 h-5" />
+                  Apply on Official Website
+                </button>
+                {mainPortal && (
+                  <a
+                    href={mainPortal}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 mt-2 text-sm text-[#1B3A6B] hover:underline"
+                  >
+                    <Globe className="w-4 h-4" />
+                    Or visit main portal: {mainPortal}
+                  </a>
+                )}
+              </>
             )}
           </>
         ) : (

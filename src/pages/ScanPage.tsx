@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from '../lib/Router';
-import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckCircle, AlertCircle, Camera, Sparkles, MessageCircle, Search, FileCheck, ChevronDown, ChevronUp, Eye, Shield, Link as LinkIcon, Info } from 'lucide-react';
+import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckCircle, AlertCircle, Camera, Sparkles, MessageCircle, Search, FileCheck, ChevronDown, ChevronUp, Eye, Shield, Link as LinkIcon, Info, Clock, Ban, Globe } from 'lucide-react';
 import { db } from '@doable/data';
 
 const AZURE_VISION_KEY = 'Fl2AbOqkbelMbWe6oGbxZtDVhoND2XOf7o1lExllXkWY9PIYjLEaJQQJ99CGACGhslBXJ3w3AAAFACOGJv24';
@@ -323,11 +323,69 @@ export function ScanPage() {
   const [mode, setMode] = useState<'image' | 'text'>('image');
   const [stage, setStage] = useState('');
   const [expandedScheme, setExpandedScheme] = useState<number | null>(null);
+  const [urlValidationStatus, setUrlValidationStatus] = useState<Record<number, 'checking' | 'valid' | 'invalid' | 'unchecked'>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { navigate } = useRouter();
 
+  // Check if an apply URL is accessible
+  async function checkApplyUrl(url: string): Promise<boolean> {
+    try {
+      // Try to fetch the URL with a short timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(url, {
+        method: "HEAD",
+        mode: "no-cors",
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      // With no-cors mode, we cannot read the response, so we assume it is valid if no error
+      return true;
+    } catch (error) {
+      // If fetch fails (network error, timeout, CORS, etc.), URL might be inaccessible
+      console.log("URL validation failed for:", url, error);
+      return false;
+    }
+  }
+
+  // Validate all apply URLs for schemes
+  async function validateSchemeUrls(schemes: SchemeInfo[]) {
+    // Initialize all as unchecked first
+    const initialStatus: Record<number, "checking" | "valid" | "invalid" | "unchecked"> = {};
+    schemes.forEach((_, index) => {
+      initialStatus[index] = "checking";
+    });
+    setUrlValidationStatus(initialStatus);
+
+    // Check each URL
+    const results = await Promise.all(
+      schemes.map(async (scheme, index) => {
+        if (!scheme.apply_url || !isValidUrl(scheme.apply_url)) {
+          return { index, isValid: false };
+        }
+        
+        try {
+          const isValid = await checkApplyUrl(scheme.apply_url);
+          return { index, isValid };
+        } catch (e) {
+          return { index, isValid: false };
+        }
+      })
+    );
+
+    // Update status for each scheme
+    const finalStatus: Record<number, "checking" | "valid" | "invalid" | "unchecked"> = {};
+    results.forEach(({ index, isValid }) => {
+      finalStatus[index] = isValid ? "valid" : "invalid";
+    });
+    setUrlValidationStatus(finalStatus);
+  }
+
+
   async function extractTextWithAzure(imageData: string): Promise<string> {
-    const base64Image = imageData.includes(',') ? imageData.split(',')[1] : imageData;
+    const base64Image = imageData.includes(',') ? (imageData.split(',')[1] || imageData) : imageData;
     const byteCharacters = atob(base64Image);
     const byteNumbers = new Array(byteCharacters.length);
     for (let i = 0; i < byteCharacters.length; i++) {
@@ -553,6 +611,11 @@ export function ScanPage() {
         schemes_found: schemesFound,
         recommendations
       });
+
+      // Validate apply URLs for found schemes
+      if (schemesFound.length > 0) {
+        validateSchemeUrls(schemesFound);
+      }
 
     } catch (err: any) {
       console.error('Analysis error:', err);
@@ -856,16 +919,39 @@ export function ScanPage() {
                               </a>
                             )}
                             {scheme.apply_url && (
-                              isValidUrl(scheme.apply_url) ? (
-                                <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors">
-                                  <LinkIcon className="w-4 h-4" /> Apply Now <ExternalLink className="w-3 h-3" />
-                                </a>
-                              ) : (
-                                <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                                  <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                                  <span className="text-sm text-amber-800">{scheme.apply_url}</span>
-                                </div>
-                              )
+                              <div className="flex flex-wrap gap-2">
+                                {urlValidationStatus[index] === 'checking' && (
+                                  <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-lg">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Checking registration status...
+                                  </div>
+                                )}
+                                {urlValidationStatus[index] === 'valid' && (
+                                  <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors">
+                                    <LinkIcon className="w-4 h-4" /> Apply Now <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                                {urlValidationStatus[index] === 'invalid' && (
+                                  <div className="flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                                    <Ban className="w-4 h-4" />
+                                    <div>
+                                      <span className="font-medium">Registration Closed</span>
+                                      <span className="block text-xs text-red-500">Visit official website for updates</span>
+                                    </div>
+                                  </div>
+                                )}
+                                {(urlValidationStatus[index] === 'unchecked' || !urlValidationStatus[index]) && isValidUrl(scheme.apply_url) && (
+                                  <a href={scheme.apply_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors">
+                                    <LinkIcon className="w-4 h-4" /> Apply Now <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                )}
+                                {(urlValidationStatus[index] === 'unchecked' || !urlValidationStatus[index]) && !isValidUrl(scheme.apply_url) && (
+                                  <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                                    <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                                    <span className="text-sm text-amber-800">{scheme.apply_url}</span>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>
