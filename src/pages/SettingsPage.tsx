@@ -1,16 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../lib/AppContext';
 import { useRouter } from '../lib/Router';
 import { LANGUAGES } from '../lib/i18n';
 import { 
   Globe, Accessibility, Bell, Download, 
-  Trash2, LogOut, ChevronRight, Moon, Sun, Shield, Database
+  Trash2, LogOut, ChevronRight, Moon, Sun, Shield, Database,
+  AlertCircle, Plus, Send, CheckCircle, MessageSquare
 } from 'lucide-react';
 
 export function SettingsPage() {
   const { profile, simpleMode, setSimpleMode, language, setLanguage, logout } = useApp();
   const { navigate } = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportType, setReportType] = useState<broken | suggest>(broken);
+  const [reportTitle, setReportTitle] = useState();
+  const [reportUrl, setReportUrl] = useState();
+  const [reportDescription, setReportDescription] = useState();
+  const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleLogout() {
     await logout();
@@ -28,6 +36,33 @@ export function SettingsPage() {
 
     alert('Account deletion requires additional verification. Please contact support.');
     setShowDeleteConfirm(false);
+  }
+
+  async function submitReport() {
+    if (!reportTitle.trim()) {
+      alert('Please enter the scheme name');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await db.query(
+        `INSERT INTO feedback (feedback_type, title, url, description, created_by)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [reportType, reportTitle.trim(), reportUrl.trim(), reportDescription.trim(), profile?.id || 'anonymous']
+      );
+      setReportSubmitted(true);
+      setTimeout(() => {
+        setShowReportModal(false);
+        setReportSubmitted(false);
+        setReportTitle('');
+        setReportUrl('');
+        setReportDescription('');
+      }, 2000);
+    } catch (error) {
+      alert('Failed to submit report. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function exportData() {
@@ -193,6 +228,41 @@ export function SettingsPage() {
           </div>
         </section>
 
+
+        {/* Help & Feedback */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase mb-3 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            Help & Feedback
+          </h2>
+          <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100">
+            <button
+              onClick={() => { setReportType('broken'); setShowReportModal(true); }}
+              className="w-full px-4 py-4 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-orange-500" />
+                <p className="font-medium text-[#1A1A2E]">Report Broken Link</p>
+              </div>
+              <ChevronRight className="w-5 h-5 text-gray-400" />
+            </button>
+            <button
+              onClick={() => { setReportType('suggest'); setShowReportModal(true); }}
+              className="w-full px-4 py-4 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3">
+                <Plus className="w-5 h-5 text-green-500" />
+                <div className="text-left">
+                  <p className="font-medium text-[#1A1A2E]">Suggest New Scheme</p>
+                  <p className="text-sm text-gray-500">Know about a scheme we should add?</p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-gray-400" />
+            </button>
+          </div>
+        </section>
+
+
         {/* Logout */}
         <button
           onClick={handleLogout}
@@ -234,6 +304,108 @@ export function SettingsPage() {
               >
                 Delete
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Broken Link / Suggest Scheme Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {reportType === 'broken' ? 'Report Broken Link' : 'Suggest New Scheme'}
+                </h2>
+                <button 
+                  onClick={() => setShowReportModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              {reportSubmitted ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-900">Thank you!</p>
+                  <p className="text-gray-600 mt-2">Your feedback has been submitted successfully.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Scheme Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={reportTitle}
+                      onChange={(e) => setReportTitle(e.target.value)}
+                      placeholder="e.g., PM Kisan Yojana"
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent"
+                    />
+                  </div>
+
+                  {reportType === 'broken' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Current (Broken) URL
+                      </label>
+                      <input
+                        type="url"
+                        value={reportUrl}
+                        onChange={(e) => setReportUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {reportType === 'broken' ? 'Correct URL (if known)' : 'Description / Website'}
+                    </label>
+                    <input
+                      type="url"
+                      value={reportUrl}
+                      onChange={(e) => setReportUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Additional Details
+                    </label>
+                    <textarea
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value)}
+                      placeholder={reportType === 'broken' 
+                        ? "Describe the issue..." 
+                        : "Tell us about this scheme..."}
+                      rows={3}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#1B3A6B] focus:border-transparent resize-none"
+                    />
+                  </div>
+
+                  <button
+                    onClick={submitReport}
+                    disabled={submitting}
+                    className="w-full py-3 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      'Submitting...'
+                    ) : (
+                      <>
+                        <Send className="w-5 h-5" />
+                        Submit Report
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
