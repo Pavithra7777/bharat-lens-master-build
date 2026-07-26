@@ -677,20 +677,23 @@ export function SchemeDetailPage() {
             )}
           </>
         ) : (
-          <button
-            disabled
-            className="w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 bg-gray-200 text-gray-500 cursor-not-allowed"
-          >
-            <ExternalLink className="w-5 h-5" />
-            No Application Link Available
-          </button>
-        )}
-        {!isValidUrl(applyUrl || '') && (
-          <p className="text-xs text-gray-400 text-center mt-2">
-            Official application link is currently unavailable
-          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => navigate('/scan')}
+              className="w-full py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 bg-[#1B3A6B] hover:bg-[#2A4A8B] text-white transition"
+            >
+              <Smartphone className="w-5 h-5" />
+              Get Help Applying
+            </button>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-xs text-amber-800 text-center">
+                <strong>Tip:</strong> Visit nearest CSC, bank branch, or post office for offline application
+              </p>
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 }
+
