@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from '../lib/Router';
 import { useApp } from '../lib/AppContext';
-import { db } from '@doable/data';
+import db from '../lib/db';
 import { translations } from '../lib/i18n';
-import { Bell, Search, Shield, ChevronRight, Mic, Camera, FileText, Users, AlertTriangle, Loader2, Bookmark, ExternalLink } from 'lucide-react';
-
+import { Bell, Search, Shield, ChevronRight, Mic, Camera, FileText, Loader2 } from 'lucide-react';
 
 interface Reminder {
   id: string;
   title: string;
   due_date: string;
-  scheme_name: string | null;
-  category: string;
-  status: string;
-  description: string | null;
+  owner_id: string | null;
+  created_by: string;
+  category?: string;
+  status?: string;
+  description?: string | null;
+  scheme_name?: string | null;
 }
 
 interface Scheme {
@@ -45,16 +46,21 @@ export function HomePage() {
     if (!user) { setLoading(false); return; }
     setLoading(true);
     try {
-      const remindersRes = await db.query<Reminder>(
-        `SELECT * FROM reminders WHERE created_by = $1 AND is_completed = false ORDER BY due_date ASC LIMIT 5`,
-        [user.id]
-      );
-      const schemesRes = await db.query<Scheme>(
-        `SELECT id, title as name, category, description, short_benefit as benefits, null as deadline, tags as tag, official_url as official_link FROM schemes WHERE is_active = true ORDER BY created_at DESC LIMIT 6`,
-        []
-      );
-      if (remindersRes.ok && remindersRes.rows) setReminders(remindersRes.rows);
-      if (schemesRes.ok && schemesRes.rows) setSchemes(schemesRes.rows);
+      const reminderData = await db.getReminders();
+      const schemeData = await db.getSchemes(6);
+
+      setReminders(reminderData.filter(r => !r.is_completed).slice(0, 5));
+      setSchemes(schemeData.map(s => ({
+        id: s.id,
+        name: s.title,
+        category: s.category,
+        description: s.description || '',
+        benefits: s.short_benefit || '',
+        eligibility: (s.category_eligible || []).join(', '),
+        deadline: null,
+        tag: s.tags || [],
+        official_link: s.official_url || s.apply_url,
+      })));
     } catch (error) {
       console.error('Home data load failed:', error);
     } finally {

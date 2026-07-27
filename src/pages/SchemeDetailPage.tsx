@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from '../lib/Router';
-import { db } from '@doable/data';
+import db from '../lib/db';
 import { useApp } from '../lib/AppContext';
 import { translations } from '../lib/i18n';
 import { 
@@ -88,15 +88,12 @@ export function SchemeDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const r = await db.query<Scheme>(
-        'SELECT * FROM schemes WHERE id = $1 AND is_active IS NOT FALSE',
-        [id]
-      );
-      if (r.ok && r.rows && r.rows.length > 0) {
-        setScheme(r.rows[0] as Scheme);
+      const scheme = await db.getSchemeById(id);
+      if (scheme) {
+        setScheme(scheme);
         
         // Check if the apply URL is accessible
-        const applyUrl = r.rows[0]?.apply_url;
+        const applyUrl = scheme.apply_url;
         if (applyUrl) {
           setLinkStatus('checking');
           checkUrlAccessibility(applyUrl);

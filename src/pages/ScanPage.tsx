@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from '../lib/Router';
+import { useNavigate } from '../lib/Router';
 import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckCircle, AlertCircle, Camera, Sparkles, MessageCircle, Search, FileCheck, ChevronDown, ChevronUp, Eye, Shield, Link as LinkIcon, Info, Clock, Ban, Globe } from 'lucide-react';
-import { db } from '@doable/data';
+import db from '../lib/db';
 
 const AZURE_VISION_KEY = 'Fl2AbOqkbelMbWe6oGbxZtDVhoND2XOf7o1lExllXkWY9PIYjLEaJQQJ99CGACGhslBXJ3w3AAAFACOGJv24';
 const AZURE_VISION_ENDPOINT = 'https://internshipvisionapi.cognitiveservices.azure.com';
@@ -325,7 +325,7 @@ export function ScanPage() {
   const [expandedScheme, setExpandedScheme] = useState<number | null>(null);
   const [urlValidationStatus, setUrlValidationStatus] = useState<Record<number, 'checking' | 'valid' | 'invalid' | 'unchecked'>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { navigate } = useRouter();
+  const navigate = useNavigate();
 
   // Check if an apply URL is accessible
   async function checkApplyUrl(url: string): Promise<boolean> {
@@ -694,22 +694,18 @@ export function ScanPage() {
         document_type: result.document_type || 'unknown',
         is_scam: result.is_scam || false,
       };
-      const r = await db.query(
-        `INSERT INTO vault_items (title, description, category, item_type, metadata)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          result.summary || 'Scanned Document',
-          result.extracted_text?.substring(0, 200) || '',
-          result.document_type || 'document',
-          'scan_result',
-          JSON.stringify(metadata)
-        ]
-      );
-      if (r.ok) {
+      const r = await db.addVaultItem({
+        title: result.summary || 'Scanned Document',
+        description: result.extracted_text?.substring(0, 200) || '',
+        category: result.document_type || 'document',
+        item_type: 'scan_result',
+        metadata,
+      });
+      if (r) {
         setSaveSuccess('Saved successfully!');
         setTimeout(() => setSaveSuccess(''), 3000);
       } else {
-        setError('Save failed: ' + (r.error?.message || 'Database error'));
+        setError('Save failed: Could not save to database');
       }
     } catch (e: any) {
       console.error('Save failed:', e);
