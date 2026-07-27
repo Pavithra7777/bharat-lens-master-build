@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useApp } from '../lib/AppContext';
 import { useRouter } from '../lib/Router';
 import { LANGUAGES } from '../lib/i18n';
+import { db } from '@doable/data';
 import { 
   Globe, Accessibility, Bell, Download, 
   Trash2, LogOut, ChevronRight, Moon, Sun, Shield, Database,
@@ -13,10 +14,10 @@ export function SettingsPage() {
   const { navigate } = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [reportType, setReportType] = useState<broken | suggest>(broken);
-  const [reportTitle, setReportTitle] = useState();
-  const [reportUrl, setReportUrl] = useState();
-  const [reportDescription, setReportDescription] = useState();
+  const [reportType, setReportType] = useState<'broken' | 'suggest'>('broken');
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportUrl, setReportUrl] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
