@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from '../lib/Router';
 import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckCircle, AlertCircle, Camera, Sparkles, MessageCircle, Search, FileCheck, ChevronDown, ChevronUp, Eye, Shield, Link as LinkIcon, Info, Clock, Ban, Globe } from 'lucide-react';
+import { createDoableClient } from '@doable/sdk';
 import db from '../lib/db';
 
-const AZURE_VISION_KEY = 'Fl2AbOqkbelMbWe6oGbxZtDVhoND2XOf7o1lExllXkWY9PIYjLEaJQQJ99CGACGhslBXJ3w3AAAFACOGJv24';
-const AZURE_VISION_ENDPOINT = 'https://internshipvisionapi.cognitiveservices.azure.com';
 
 // Helper function to check if a string is a valid URL
 function isValidUrl(urlString: string): boolean {
@@ -384,78 +383,17 @@ export function ScanPage() {
   }
 
 
-  async function extractTextWithAzure(imageData: string): Promise<string> {
+  async function extractTextWithOpenAI(imageData: string): Promise<string> {
     const base64Image = imageData.includes(',') ? (imageData.split(',')[1] || imageData) : imageData;
-    const byteCharacters = atob(base64Image);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const imageBlob = new Blob([byteArray], { type: 'image/jpeg' });
-
-    try {
-      const readResponse = await fetch(AZURE_VISION_ENDPOINT + '/vision/v3.2/read/analyze?language=en', {
-        method: 'POST',
-        headers: {
-          'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY,
-          'Content-Type': 'application/octet-stream'
-        },
-        body: imageBlob
-      });
-
-      if (readResponse.ok) {
-        const operationLocation = readResponse.headers.get('Operation-Location');
-        if (operationLocation) {
-          for (let i = 0; i < 15; i++) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const statusResponse = await fetch(operationLocation, {
-              headers: { 'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY }
-            });
-            const statusData = await statusResponse.json();
-            if (statusData.status === 'succeeded') {
-              const lines = statusData.analyzeResult?.readResults?.map((r: any) => 
-                r.lines?.map((l: any) => l.text).join('\n') || ''
-              ).join('\n') || '';
-              return lines.trim();
-            } else if (statusData.status === 'failed') {
-              break;
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.log('Read API failed, trying OCR...');
-    }
-
-    const ocrResponse = await fetch(AZURE_VISION_ENDPOINT + '/vision/v3.2/ocr?language=unk&detectOrientation=true', {
-      method: 'POST',
-      headers: {
-        'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY,
-        'Content-Type': 'application/octet-stream'
-      },
-      body: imageBlob
+    const doable = createDoableClient();
+    const result = await doable.integrations.run('openai', 'vision_prompt', {
+      image: base64Image,
+      prompt: 'Please extract ALL readable text from this image exactly as it appears. Preserve line breaks and formatting. If there are tables, extract them as text rows. Include any scheme names, government departments, dates, eligibility criteria, benefits, and official links you can identify.'
     });
-
-    if (!ocrResponse.ok) {
-      throw new Error('Azure OCR failed: ' + ocrResponse.status);
+    if (result.success && result.data) {
+      return typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
     }
-
-    const ocrResult = await ocrResponse.json();
-    let extractedText = '';
-    
-    if (ocrResult.regions) {
-      for (const region of ocrResult.regions) {
-        for (const line of region.lines) {
-          for (const word of line.words) {
-            extractedText += word.text + ' ';
-          }
-          extractedText += '\n';
-        }
-      }
-    }
-    
-    return extractedText.trim();
+    throw new Error('Failed to analyze text. Please try again.');
   }
 
   function detectScamPatterns(text: string): { isScam: boolean; score: number; warnings: string[] } {
@@ -539,7 +477,7 @@ export function ScanPage() {
 
       if (imageData) {
         setStage('Extracting text with Azure Vision...');
-        extractedText = await extractTextWithAzure(imageData);
+        extractedText = await extractTextWithOpenAI(imageData);
         setExtractedText(extractedText);
 
         if (!extractedText) {
