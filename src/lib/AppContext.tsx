@@ -68,7 +68,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await loadOrCreateProfile(currentUser.id);
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Auth check failed:', error);
     } finally {
       setIsLoading(false);
     }
@@ -98,7 +98,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('Load/create profile failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Load/create profile failed:', error);
       // Fallback: create a local profile when database is unavailable
       // This allows the app to proceed through onboarding even without DB
       const fallbackProfile = {
@@ -139,7 +139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setFamilyMembers(mapped);
       }
     } catch (error) {
-      console.error('Load family members failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Load family members failed:', error);
     }
   }
 
