@@ -49,13 +49,13 @@ export function FamilyPage() {
     if (!profile) return;
     setLoading(true);
     try {
-      const group = await db.getFamilyGroupByOwner();
+      const group = await db.getFamilyGroupByOwner(profile.id);
       if (group) {
         const data = await db.getFamilyMembers(group.id);
         setMembers(data);
       }
     } catch (error) {
-      console.error('Load members failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Load members failed:', error);
     } finally {
       setLoading(false);
     }
@@ -65,9 +65,9 @@ export function FamilyPage() {
     if (!memberName.trim() || !profile) return;
     setSaving(true);
     try {
-      let group = await db.getFamilyGroupByOwner();
+      let group = await db.getFamilyGroupByOwner(profile.id);
       if (!group) {
-        group = await db.addFamilyGroup({ group_name: profile.full_name ? `${profile.full_name}'s Family` : 'My Family' });
+        group = await db.addFamilyGroup({ owner_id: profile.id, group_name: profile.full_name ? `${profile.full_name}'s Family` : 'My Family' });
       }
       if (group) {
         const newMember = await db.addFamilyMember({
@@ -86,7 +86,7 @@ export function FamilyPage() {
       }
       resetForm();
     } catch (error) {
-      console.error('Add member failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Add member failed:', error);
     } finally {
       setSaving(false);
     }
@@ -98,7 +98,7 @@ export function FamilyPage() {
       await db.deleteFamilyMember(id);
       setMembers(prev => prev.filter(m => m.id !== id));
     } catch (error) {
-      console.error('Delete failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Delete failed:', error);
     }
   }
 

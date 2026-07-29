@@ -245,10 +245,16 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     let q = client.from('schemes').select('*').order('created_at', { ascending: false });
-    if (state) q = q.or(`state.ilike.%${state}%,state.is.null`);
+    if (state) q = q.eq(`applicable_states.cs.{${state}}`);
     const { data, error } = await q;
     if (error) { safeError('getSchemes error:', error); return []; }
-    return (data as Scheme[]) || [];
+    // Map DB columns to interface fields the UI expects
+    return (data || []).map((s: any) => ({
+      ...s,
+      name: s.title,
+      benefits: s.short_benefit || s.benefit_type || '',
+      how_to_apply: Array.isArray(s.application_mode) ? s.application_mode.join(', ') : (s.application_mode || ''),
+    })) as Scheme[];
   },
 
   async getSchemeById(id: string): Promise<Scheme | null> {
@@ -256,18 +262,32 @@ const db = {
     if (!client) return null;
     const { data, error } = await client.from('schemes').select('*').eq('id', id).single();
     if (error) { safeError('getSchemeById error:', error); return null; }
-    return data as Scheme | null;
+    if (!data) return null;
+    // Map DB columns to interface fields the UI expects
+    const s: any = data;
+    return {
+      ...data,
+      name: s.title,
+      benefits: s.short_benefit || s.benefit_type || '',
+      how_to_apply: Array.isArray(s.application_mode) ? s.application_mode.join(', ') : (s.application_mode || ''),
+    } as Scheme;
   },
 
   async searchSchemes(query: string, category?: string): Promise<Scheme[]> {
     const client = getSupabase();
     if (!client) return [];
     let q = client.from('schemes').select('*')
-      .or(`name.ilike.%${query}%,description.ilike.%${query}%,eligibility.ilike.%${query}%`);
+      .or(`title.ilike.%${query}%,description.ilike.%${query}%`);
     if (category) q = q.eq('category', category);
     const { data, error } = await q;
     if (error) { safeError('searchSchemes error:', error); return []; }
-    return (data as Scheme[]) || [];
+    // Map DB columns to interface fields the UI expects
+    return (data || []).map((s: any) => ({
+      ...s,
+      name: s.title,
+      benefits: s.short_benefit || s.benefit_type || '',
+      how_to_apply: Array.isArray(s.application_mode) ? s.application_mode.join(', ') : (s.application_mode || ''),
+    })) as Scheme[];
   },
 
   // ── Vault Items ────────────────────────────────────────────
@@ -412,7 +432,10 @@ const db = {
   async addFamilyGroup(group: Partial<FamilyGroup>): Promise<FamilyGroup | null> {
     const client = getSupabase();
     if (!client) return null;
-    const { data, error } = await client.from('family_groups').insert(group as FamilyGroup).select().single();
+    // Map 'name' to 'group_name' for DB column
+    const dbGroup = { ...group, group_name: group.name || group.group_name };
+    delete (dbGroup as any).name;
+    const { data, error } = await client.from('family_groups').insert(dbGroup as FamilyGroup).select().single();
     if (error) { safeError('addFamilyGroup error:', error); return null; }
     return data as FamilyGroup | null;
   },
@@ -431,7 +454,7 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     let q = client.from('family_members').select('*').order('created_at', { ascending: false });
-    if (groupId) q = q.eq('group_id', groupId);
+    if (groupId) q = q.eq('family_group_id', groupId);
     const { data, error } = await q;
     if (error) { safeError('getFamilyMembers error:', error); return []; }
     return (data as FamilyMember[]) || [];
@@ -440,7 +463,15 @@ const db = {
   async addFamilyMember(member: Partial<FamilyMember>): Promise<FamilyMember | null> {
     const client = getSupabase();
     if (!client) return null;
-    const { data, error } = await client.from('family_members').insert(member as FamilyMember).select().single();
+    // Map interface fields to DB columns
+    const dbMember = {
+      family_group_id: member.group_id,
+      profile_id: member.profile_id,
+      relation: member.relationship || member.relation,
+      display_name: member.name || (member as any).display_name,
+      permissions: member.permissions || {},
+    };
+    const { data, error } = await client.from('family_members').insert(dbMember).select().single();
     if (error) { safeError('addFamilyMember error:', error); return null; }
     return data as FamilyMember | null;
   },
@@ -460,13 +491,33 @@ const db = {
     if (!client) return [];
     const { data, error } = await client.from('documents').select('*').order('created_at', { ascending: false });
     if (error) { safeError('getDocuments error:', error); return []; }
-    return (data as Document[]) || [];
+    // Map DB columns back to interface fields
+    return (data || []).map((d: any) => ({
+      id: d.id,
+      created_by: d.created_by,
+      created_at: d.created_at,
+      title: d.original_filename || d.ai_summary || d.document_type || 'Untitled',
+      doc_type: d.document_type,
+      file_url: d.file_path,
+      expiry_date: d.expiry_date,
+      notes: d.ocr_extracted_text,
+      metadata: d.metadata,
+    })) as Document[];
   },
 
   async addDocument(doc: Partial<Document>): Promise<Document | null> {
     const client = getSupabase();
     if (!client) return null;
-    const { data, error } = await client.from('documents').insert(doc as Document).select().single();
+    // Map interface fields to DB columns
+    const dbDoc: any = {
+      document_type: doc.doc_type || doc.title,
+      original_filename: doc.title,
+      file_path: doc.file_url,
+      expiry_date: doc.expiry_date,
+      ocr_extracted_text: doc.notes,
+      metadata: doc.metadata || {},
+    };
+    const { data, error } = await client.from('documents').insert(dbDoc).select().single();
     if (error) { safeError('addDocument error:', error); return null; }
     return data as Document | null;
   },

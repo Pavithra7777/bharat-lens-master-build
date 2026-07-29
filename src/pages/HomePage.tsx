@@ -47,7 +47,7 @@ export function HomePage() {
     setLoading(true);
     try {
       const reminderData = await db.getReminders();
-      const schemeData = await db.getSchemes(6);
+      const schemeData = await db.getSchemes();
 
       setReminders(reminderData.filter(r => !r.is_completed).slice(0, 5));
       setSchemes(schemeData.map(s => ({
@@ -62,7 +62,7 @@ export function HomePage() {
         official_link: s.official_url || s.apply_url,
       })));
     } catch (error) {
-      console.error('Home data load failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Home data load failed:', error);
     } finally {
       setLoading(false);
     }

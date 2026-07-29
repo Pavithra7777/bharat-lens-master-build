@@ -102,7 +102,7 @@ export function SchemeDetailPage() {
         setError('Scheme not found');
       }
     } catch (err) {
-      console.error('Failed to load scheme:', err);
+      if (err?.code !== 'PGRST205') console.error('Failed to load scheme:', err);
       setError('Failed to load scheme details');
     } finally {
       setLoading(false);

@@ -618,7 +618,7 @@ export function ScanPage() {
       }
 
     } catch (err: any) {
-      console.error('Analysis error:', err);
+      if (err?.code !== 'PGRST205') console.error('Analysis error:', err);
       setError('Analysis failed: ' + (err.message || 'Please check your internet connection and try again.'));
       setResult({
         is_scam: false,
@@ -708,7 +708,7 @@ export function ScanPage() {
         setError('Save failed: Could not save to database');
       }
     } catch (e: any) {
-      console.error('Save failed:', e);
+      if (e?.code !== 'PGRST205') console.error('Save failed:', e);
       setError('Save failed: ' + (e.message || 'Unknown error'));
     }
     setSaving(false);
