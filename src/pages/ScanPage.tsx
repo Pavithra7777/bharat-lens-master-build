@@ -383,16 +383,75 @@ export function ScanPage() {
   }
 
 
-  async function extractTextWithOpenAI(imageData: string): Promise<string> {
+  async function extractTextWithVision(imageData: string): Promise<string> {
     const base64Image = imageData.includes(',') ? (imageData.split(',')[1] || imageData) : imageData;
     const doable = createDoableClient();
-    const result = await doable.integrations.run('openai', 'vision_prompt', {
-      image: base64Image,
-      prompt: 'Please extract ALL readable text from this image exactly as it appears. Preserve line breaks and formatting. If there are tables, extract them as text rows. Include any scheme names, government departments, dates, eligibility criteria, benefits, and official links you can identify.'
-    });
-    if (result.success && result.data) {
-      return typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+    const prompt = 'Please extract ALL readable text from this image exactly as it appears. Preserve line breaks and formatting. If there are tables, extract them as text rows. Include any scheme names, government departments, dates, eligibility criteria, benefits, and official links you can identify.';
+
+    // Try OpenAI Vision first
+    try {
+      const result = await doable.integrations.run('openai', 'vision_prompt', {
+        image: base64Image,
+        prompt,
+      });
+      if (result?.success && result?.data) {
+        const raw = result.data as any;
+        const text = typeof raw === 'string'
+          ? raw
+          : (raw?.text ?? raw?.content ?? JSON.stringify(raw));
+        if (text && text.trim().length > 0) {
+          return text.trim();
+        }
+      }
+    } catch (e) {
+      console.warn('OpenAI vision failed, trying Groq:', e);
     }
+
+    // Fallback: Try Groq vision if available (Llama vision models)
+    try {
+      const result = await doable.integrations.run('groq', 'chat_completion', {
+        model: 'llama-3.2-11b-vision-preview',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
+            ]
+          }
+        ],
+        max_tokens: 2048,
+      });
+      if (result?.success && result?.data) {
+        const raw2 = result.data as any;
+        const content = raw2?.choices?.[0]?.message?.content;
+        if (content && typeof content === 'string' && content.trim().length > 0) {
+          return content.trim();
+        }
+      }
+    } catch (e) {
+      console.warn('Groq vision failed, trying Gemini:', e);
+    }
+
+    // Final fallback: Try Google Gemini
+    try {
+      const geminiResult = await doable.integrations.run('google_gemini', 'generate_content', {
+        prompt: `Analyze this image and extract ALL readable text exactly as it appears. Include any scheme names, government departments, dates, eligibility criteria, benefits, and official links.\n\n${prompt}`,
+        model: 'gemini-1.5-flash',
+      });
+      if (geminiResult?.success && geminiResult?.data) {
+        const raw3 = geminiResult.data as any;
+        const text = typeof raw3 === 'string'
+          ? raw3
+          : (raw3?.text ?? JSON.stringify(raw3));
+        if (text && text.trim().length > 0) {
+          return text.trim();
+        }
+      }
+    } catch (e) {
+      console.warn('Gemini fallback failed:', e);
+    }
+
     throw new Error('Failed to analyze text. Please try again.');
   }
 
@@ -476,8 +535,8 @@ export function ScanPage() {
       let extractedText = textData;
 
       if (imageData) {
-        setStage('Extracting text with Azure Vision...');
-        extractedText = await extractTextWithOpenAI(imageData);
+        setStage('Extracting text with AI Vision......');
+        extractedText = await extractTextWithVision(imageData);
         setExtractedText(extractedText);
 
         if (!extractedText) {
