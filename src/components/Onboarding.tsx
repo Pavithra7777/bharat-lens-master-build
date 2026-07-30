@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { db } from '@doable/data';
+import db from '../lib/db';
 import { useApp } from '../lib/AppContext';
-import { useRouter } from '../lib/Router';
+import { useNavigate } from '../lib/Router';
 import { LANGUAGES, type Language } from '../lib/i18n';
 import { ArrowRight, ArrowLeft, Check, User, MapPin, Briefcase, Languages } from 'lucide-react';
 
@@ -35,7 +35,7 @@ export function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   
   const { profile, setProfile, setLanguage: setAppLanguage } = useApp();
-  const { navigate } = useRouter();
+  const navigate = useNavigate();
 
   async function handleComplete() {
     if (!profile || !name.trim()) return;
@@ -43,17 +43,13 @@ export function OnboardingPage() {
 
     try {
       // Update profile with onboarding data
-      await db.query(
-        `UPDATE profiles SET 
-          full_name = $1, 
-          state = $2, 
-          occupation_category = $3, 
-          preferred_language = $4,
-          onboarding_completed = true,
-          updated_at = now()
-        WHERE id = $5`,
-        [name.trim(), state, occupation, language, profile.id]
-      );
+      await db.updateProfile(profile.id, {
+        full_name: name.trim(),
+        state,
+        occupation_category: occupation,
+        preferred_language: language,
+        onboarding_completed: true,
+      });
       
       // Update local state
       setProfile({

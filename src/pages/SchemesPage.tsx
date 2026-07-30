@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { db } from '@doable/data';
+import db from '../lib/db';
 import { ai, type ChatMessage } from '@doable/ai';
 import { useApp } from '../lib/AppContext';
 import { useRouter, Link } from '../lib/Router';
@@ -123,11 +123,9 @@ export function SchemesPage() {
 
   async function loadLastUpdateInfo() {
     try {
-      const r = await db.query<LiveUpdateRecord>(
-        'SELECT * FROM live_scheme_updates ORDER BY last_fetched_at DESC LIMIT 1'
-      );
-      if (r.ok && r.rows.length > 0) {
-        setLastLiveUpdate(r.rows[0] as LiveUpdateRecord);
+      const update = await db.getLastLiveUpdate();
+      if (update) {
+        setLastLiveUpdate(update);
       }
     } catch (error) {
       console.error('Failed to load update info:', error);
@@ -137,10 +135,8 @@ export function SchemesPage() {
   async function loadSchemes() {
     setLoading(true);
     try {
-      const r = await db.query<Scheme>('SELECT * FROM schemes WHERE is_active IS NOT FALSE ORDER BY created_at DESC');
-      if (r.ok) {
-        setSchemes(r.rows as Scheme[]);
-      }
+      const data = await db.getSchemes();
+      setSchemes(data);
     } catch (error) {
       console.error('Failed to load schemes:', error);
     } finally {
@@ -169,10 +165,12 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
         const schemes = JSON.parse(cleaned);
         
         if (Array.isArray(schemes) && schemes.length > 0) {
-          await db.query(
-            'INSERT INTO live_scheme_updates (status, schemes_found_count, new_schemes_count, source_name) VALUES ($1, $2, $3, $4)',
-            ['success', schemes.length, schemes.length, 'AI Research']
-          );
+          await db.addLiveSchemeUpdate({
+            status: 'success',
+            schemes_found_count: schemes.length,
+            new_schemes_count: schemes.length,
+            source_name: 'AI Research',
+          });
           setNewSchemesFromUpdate(schemes);
           setLastLiveUpdate({
             id: '',
@@ -185,10 +183,12 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
         }
       } catch (e) {
         console.error('Failed to parse AI response:', e);
-        await db.query(
-          'INSERT INTO live_scheme_updates (status, schemes_found_count, source_name) VALUES ($1, $2, $3)',
-          ['failed', 0, 'AI Research']
-        );
+        await db.addLiveSchemeUpdate({
+          status: 'failed',
+          schemes_found_count: 0,
+          new_schemes_count: 0,
+          source_name: 'AI Research',
+        });
       }
     } catch (error) {
       console.error('Failed to fetch live updates:', error);
