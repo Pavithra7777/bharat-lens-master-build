@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import db from '../lib/db';
+import { db } from '@doable/data';
 
 interface Scheme {
   id: string;
@@ -25,26 +25,30 @@ export default function UrlReport() {
   }, []);
 
   async function loadSchemes() {
-    const data = await db.getSchemes();
-    setSchemes(data);
-    const statuses: Record<string, UrlStatus> = {};
-    data.forEach(s => {
-      if (s.apply_url) statuses[s.apply_url] = { url: s.apply_url, status: 'pending' };
-      if (s.official_url) statuses[s.official_url] = { url: s.official_url, status: 'pending' };
-    });
-    setUrlStatuses(statuses);
+    const result = await db.query<Scheme>(
+      'SELECT id, title, apply_url, official_url FROM schemes ORDER BY title'
+    );
+    if (result.ok) {
+      setSchemes(result.rows);
+      const statuses: Record<string, UrlStatus> = {};
+      result.rows.forEach(s => {
+        if (s.apply_url) statuses[s.apply_url] = { url: s.apply_url, status: 'pending' };
+        if (s.official_url) statuses[s.official_url] = { url: s.official_url, status: 'pending' };
+      });
+      setUrlStatuses(statuses);
+    }
     setLoading(false);
   }
 
   async function runAllTests() {
     setTesting(true);
     const uniqueUrls = [...new Set(schemes.flatMap(s => [s.apply_url, s.official_url].filter(Boolean)))];
-
+    
     for (let i = 0; i < uniqueUrls.length; i++) {
       setTestIndex(i);
       const url = uniqueUrls[i];
       setUrlStatuses(prev => ({ ...prev, [url]: { url, status: 'checking' } }));
-
+      
       await new Promise<void>((resolve) => {
         const img = document.createElement('img');
         img.onload = () => { setUrlStatuses(prev => ({ ...prev, [url]: { url, status: 'ok' } })); resolve(); };
@@ -112,7 +116,7 @@ export default function UrlReport() {
           {schemes.map((scheme, idx) => {
             const applyStatus = urlStatuses[scheme.apply_url]?.status || 'pending';
             const officialStatus = urlStatuses[scheme.official_url]?.status || 'pending';
-
+            
             return (
               <div key={scheme.id} className="bg-white rounded-xl p-4 shadow-sm">
                 <h3 className="font-medium text-[#1A1A2E] mb-2">{idx + 1}. {scheme.title}</h3>

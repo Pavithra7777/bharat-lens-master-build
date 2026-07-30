@@ -21,7 +21,6 @@ import { ScamPage } from './pages/ScamPage';
 import { FamilyPage } from './pages/FamilyPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { MigrationPage } from './pages/MigrationPage';
-import UrlReport from './pages/UrlReport';
 
 // Bottom Navigation Items
 const NAV_ITEMS = [

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { sbAuth } from '../lib/sbAuth';
 import { useApp } from '../lib/AppContext';
-import { useNavigate } from '../lib/Router';
+import { useRouter } from '../lib/Router';
 import { Eye, EyeOff, Mail, Lock, User, ArrowRight, AlertCircle, CheckCircle } from 'lucide-react';
 
 export function AuthPage() {
@@ -18,7 +18,7 @@ export function AuthPage() {
   const [loginSuccess, setLoginSuccess] = useState(false);
   
   const { user, setUser } = useApp();
-  const navigate = useNavigate();
+  const { navigate } = useRouter();
 
   useEffect(() => {
     if (user) {

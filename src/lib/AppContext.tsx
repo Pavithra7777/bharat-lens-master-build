@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import db from './db';
+import { db } from '@doable/data';
 import { sbAuth } from './sbAuth';
 import { type Language } from './i18n';
 
@@ -68,7 +68,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await loadOrCreateProfile(currentUser.id);
       }
     } catch (error) {
-      if (error?.code !== 'PGRST205') console.error('Auth check failed:', error);
+      console.error('Auth check failed:', error);
     } finally {
       setIsLoading(false);
     }
@@ -77,69 +77,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function loadOrCreateProfile(userId: string) {
     try {
       // First try to read profile
-      const data = await db.getProfile(userId);
+      const result = await db.query<Profile>(
+        'SELECT * FROM profiles WHERE id = $1 LIMIT 1',
+        [userId]
+      );
 
-      if (data) {
-        setProfile(data as Profile);
+      if (result.ok && result.rows && result.rows.length > 0) {
+        const data = result.rows[0];
+        setProfile(data);
         setSimpleModeState(data.simple_mode_enabled || false);
-        setLanguageState((data.preferred_language || 'en') as Language);
-        if (data.id) await loadFamilyMembers(data.id);
+        setLanguageState((data.preferred_language as Language) || 'en');
+        await loadFamilyMembers(data.id);
       } else {
-        // Create new profile — upsertProfile sets created_by from auth
-        const newProfile = await db.upsertProfile({
-          id: userId,
-          full_name: 'User',
-          preferred_language: 'en',
-          onboarding_completed: false,
-          created_by: userId,
-        });
-        if (newProfile) {
-          setProfile(newProfile as Profile);
+        // Create new profile with explicit created_by
+        const insertResult = await db.query<Profile>(
+          `INSERT INTO profiles (id, full_name, preferred_language, created_by, onboarding_completed) 
+           VALUES ($1, $2, $3, $1, false) 
+           RETURNING *`,
+          [userId, 'User', 'en']
+        );
+        if (insertResult.ok && insertResult.rows && insertResult.rows.length > 0) {
+          setProfile(insertResult.rows[0]);
         }
       }
     } catch (error) {
-      if (error?.code !== 'PGRST205') console.error('Load/create profile failed:', error);
-      // Fallback: create a local profile when database is unavailable
-      // This allows the app to proceed through onboarding even without DB
-      const fallbackProfile = {
-        id: userId,
-        full_name: '',
-        phone: null,
-        preferred_language: 'en' as Language,
-        state: '',
-        district: null,
-        date_of_birth: null,
-        occupation_category: '',
-        simple_mode_enabled: false,
-        onboarding_completed: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        created_by: userId,
-      };
-      setProfile(fallbackProfile);
+      console.error('Load/create profile failed:', error);
     }
   }
 
   async function loadFamilyMembers(profileId: string) {
     try {
-      const group = await db.getFamilyGroupByOwner(profileId);
-      if (group) {
-        const members = await db.getFamilyMembers(group.id);
-        const mapped: FamilyMember[] = (members || []).map(m => ({
-          id: m.id || '',
-          family_group_id: m.group_id || m.id || '',
-          profile_id: (m as any).profile_id || null,
-          relation: m.relationship || 'member',
-          display_name: m.name || 'Family Member',
-          permissions: {
-            view_documents: !!(m.permissions as any)?.view_documents || true,
-            manage_reminders: !!(m.permissions as any)?.manage_reminders || false,
-          },
-        }));
-        setFamilyMembers(mapped);
+      const groupResult = await db.query<{ id: string }>(
+        'SELECT id FROM family_groups WHERE owner_id = $1 LIMIT 1',
+        [profileId]
+      );
+
+      if (groupResult.ok && groupResult.rows && groupResult.rows.length > 0) {
+        const membersResult = await db.query<FamilyMember>(
+          'SELECT * FROM family_members WHERE family_group_id = $1 ORDER BY invited_at ASC',
+          [groupResult.rows[0].id]
+        );
+        if (membersResult.ok && membersResult.rows) {
+          setFamilyMembers(membersResult.rows);
+        }
       }
     } catch (error) {
-      if (error?.code !== 'PGRST205') console.error('Load family members failed:', error);
+      console.error('Load family members failed:', error);
     }
   }
 
@@ -165,7 +148,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function setSimpleMode(enabled: boolean) {
     setSimpleModeState(enabled);
     if (profile) {
-      await db.updateProfile(profile.id, { simple_mode_enabled: enabled });
+      await db.query(
+        'UPDATE profiles SET simple_mode_enabled = $1, updated_at = now() WHERE id = $2',
+        [enabled, profile.id]
+      );
       setProfile(prev => prev ? { ...prev, simple_mode_enabled: enabled } : null);
     }
   }
@@ -173,7 +159,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function setLanguage(lang: Language) {
     setLanguageState(lang);
     if (profile) {
-      await db.updateProfile(profile.id, { preferred_language: lang });
+      await db.query(
+        'UPDATE profiles SET preferred_language = $1, updated_at = now() WHERE id = $2',
+        [lang, profile.id]
+      );
       setProfile(prev => prev ? { ...prev, preferred_language: lang } : null);
     }
   }
