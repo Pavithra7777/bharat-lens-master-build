@@ -1,27 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-
-// Use environment variables or fallback to constants
-const supabaseUrl = (() => {
-  const val = import.meta.env.VITE_SUPABASE_URL;
-  if (val && val.startsWith('http')) return val;
-  return 'https://uvtedewjjkulnkthwcmk.supabase.co';
-})();
-const supabaseAnonKey = (() => {
-  const val = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (val && val.length > 10) return val;
-  return 'sb_publishable_ythzGuzXHUW_T8vPqEONBA_C3au-5Je';
-})();
-
-let supabase: ReturnType<typeof createClient> | null = null;
-
-function getSupabase() {
-  if (!supabase && supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('http')) {
-    supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: { persistSession: false, detectSessionInUrl: false },
-    });
-  }
-  return supabase;
-}
+// Import shared Supabase client so auth sessions are synced across the app
+import { supabase } from './supabase';
 
 // Helper to check if error is "table not found in schema cache" (expected before migration)
 function isSchemaNotReady(error: any): boolean {
@@ -34,6 +12,11 @@ function safeError(label: string, error: any) {
     console.error(label, error);
   }
 }
+
+function getSupabase() {
+  return supabase;
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // Types (matching Supabase schema)
