@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { AppProvider, useApp } from './lib/AppContext';
-import { RouterProvider, useRouter, Link } from './lib/Router';
+import { RouterProvider, useRouter, Link, useNavigate } from './lib/Router';
 import { 
   Home, Camera, MessageCircle, FolderOpen, Search, 
   Calendar, Shield, Users, Settings
@@ -21,6 +21,7 @@ import { ScamPage } from './pages/ScamPage';
 import { FamilyPage } from './pages/FamilyPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { MigrationPage } from './pages/MigrationPage';
+import UrlReportPage from './pages/UrlReport';
 
 // Bottom Navigation Items
 const NAV_ITEMS = [
@@ -47,6 +48,7 @@ const NAV_ITEMS_FULL = [
 function AppContent() {
   const { user, isLoading, profile, simpleMode } = useApp();
   const { currentPath } = useRouter();
+  const navigate = useNavigate();
   const [showFullNav, setShowFullNav] = useState(false);
   const prevUserRef = useRef<typeof user>(null);
 
@@ -56,10 +58,10 @@ function AppContent() {
   // Redirect to home when user logs in (more robust tracking)
   useEffect(() => {
     if (prevUserRef.current === null && user !== null) {
-      window.location.hash = '/';
+      navigate('/');
     }
     prevUserRef.current = user;
-  }, [user]);
+  }, [user, navigate]);
 
   const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
 
@@ -200,7 +202,7 @@ function PageRouter({ currentPath }: { currentPath: string }) {
     case '/settings':
       return <SettingsPage />;
     case '/urls':
-      return <UrlReport />;
+      return <UrlReportPage />;
     case '/migrate':
       return <MigrationPage />;
     case '/auth':

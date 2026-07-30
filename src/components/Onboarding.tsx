@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
-import { useRouter } from '../lib/Router';
+import { useNavigate } from '../lib/Router';
 import { LANGUAGES, type Language } from '../lib/i18n';
 import { ArrowRight, ArrowLeft, Check, User, MapPin, Briefcase, Languages } from 'lucide-react';
 
@@ -35,27 +35,18 @@ export function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   
   const { profile, setProfile, setLanguage: setAppLanguage } = useApp();
-  const { navigate } = useRouter();
+  const navigate = useNavigate();
 
   async function handleComplete() {
     if (!profile || !name.trim()) return;
     setLoading(true);
 
     try {
-      // Update profile with onboarding data
       await db.query(
-        `UPDATE profiles SET 
-          full_name = $1, 
-          state = $2, 
-          occupation_category = $3, 
-          preferred_language = $4,
-          onboarding_completed = true,
-          updated_at = now()
-        WHERE id = $5`,
+        'UPDATE profiles SET full_name = $1, state = $2, occupation_category = $3, preferred_language = $4, onboarding_completed = true, updated_at = now() WHERE id = $5',
         [name.trim(), state, occupation, language, profile.id]
       );
       
-      // Update local state
       setProfile({
         ...profile,
         full_name: name.trim(),
@@ -65,11 +56,8 @@ export function OnboardingPage() {
         onboarding_completed: true,
       });
       
-      // Update app language
       setAppLanguage(language);
-      
-      // Redirect to home immediately
-      window.location.hash = '/';
+      navigate('/');
       window.location.reload();
     } catch (error) {
       console.error('Onboarding update failed:', error);
@@ -101,31 +89,43 @@ export function OnboardingPage() {
     }
   }
 
+  function getStepClass(idx: number) {
+    return idx <= step ? 'bg-white text-[#1B3A6B]' : 'bg-white/20 text-white';
+  }
+
+  function getDividerClass(idx: number) {
+    return idx < step ? 'bg-white' : 'bg-white/20';
+  }
+
+  function getStateButtonClass(s: string) {
+    return state === s ? 'border-[#1B3A6B] bg-[#1B3A6B]/5' : 'border-gray-200 hover:border-gray-300';
+  }
+
+  function getOccButtonClass(occ: { id: string }) {
+    return occupation === occ.id ? 'border-[#1B3A6B] bg-[#1B3A6B]/5' : 'border-gray-200 hover:border-gray-300';
+  }
+
+  function getLangButtonClass(langCode: string) {
+    return language === langCode ? 'border-[#1B3A6B] bg-[#1B3A6B]/5' : 'border-gray-200 hover:border-gray-300';
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#1B3A6B] to-[#2A4A8B] flex flex-col">
-      {/* Progress */}
       <div className="p-6">
         <div className="flex items-center justify-between mb-4">
           {STEPS.map((_, i) => (
             <div key={i} className="flex items-center">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition ${
-                  i <= step
-                    ? 'bg-white text-[#1B3A6B]'
-                    : 'bg-white/20 text-white'
-                }`}
-              >
+              <div className={'w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition ' + getStepClass(i)}>
                 {i < step ? <Check className="w-4 h-4" /> : i + 1}
               </div>
               {i < STEPS.length - 1 && (
-                <div className={`w-12 h-0.5 mx-1 ${i < step ? 'bg-white' : 'bg-white/20'}`} />
+                <div className={'w-12 h-0.5 mx-1 ' + getDividerClass(i)} />
               )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 bg-white rounded-t-3xl p-6">
         {step === 0 && (
           <div className="space-y-6">
@@ -157,11 +157,7 @@ export function OnboardingPage() {
                 <button
                   key={s}
                   onClick={() => setState(s)}
-                  className={`p-3 rounded-xl border-2 text-left transition ${
-                    state === s
-                      ? 'border-[#1B3A6B] bg-[#1B3A6B]/5'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                  className={'p-3 rounded-xl border-2 text-left transition ' + getStateButtonClass(s)}
                 >
                   <span className="text-sm font-medium text-[#1A1A2E]">{s}</span>
                 </button>
@@ -182,11 +178,7 @@ export function OnboardingPage() {
                 <button
                   key={occ.id}
                   onClick={() => setOccupation(occ.id)}
-                  className={`p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition ${
-                    occupation === occ.id
-                      ? 'border-[#1B3A6B] bg-[#1B3A6B]/5'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                  className={'p-4 rounded-xl border-2 flex flex-col items-center gap-2 transition ' + getOccButtonClass(occ)}
                 >
                   <span className="text-3xl">{occ.icon}</span>
                   <span className="text-sm font-medium text-[#1A1A2E]">{occ.label}</span>
@@ -208,11 +200,7 @@ export function OnboardingPage() {
                 <button
                   key={lang.code}
                   onClick={() => setLanguage(lang.code)}
-                  className={`p-4 rounded-xl border-2 flex items-center gap-3 transition ${
-                    language === lang.code
-                      ? 'border-[#1B3A6B] bg-[#1B3A6B]/5'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                  className={'p-4 rounded-xl border-2 flex items-center gap-3 transition ' + getLangButtonClass(lang.code)}
                 >
                   <span className="text-2xl">{lang.flag}</span>
                   <span className="text-sm font-medium text-[#1A1A2E]">{lang.nativeName}</span>
@@ -222,7 +210,6 @@ export function OnboardingPage() {
           </div>
         )}
 
-        {/* Navigation */}
         <div className="mt-8 flex gap-3">
           {step > 0 && (
             <button

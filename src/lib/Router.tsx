@@ -3,26 +3,19 @@ import React, { createContext, useContext, useState, useEffect, useCallback, typ
 interface RouterContextType {
   currentPath: string;
   params: Record<string, string>;
+  navigate: (path: string) => void;
 }
 
 const RouterContext = createContext<RouterContextType>({
   currentPath: '/',
   params: {},
+  navigate: () => {},
 });
 
 export function RouterProvider({ children }: { children: ReactNode }) {
   const [currentPath, setCurrentPath] = useState<string>('/');
   const [params, setParams] = useState<Record<string, string>>({});
 
-  // Initialize from current hash
-  useEffect(() => {
-    const hash = window.location.hash.slice(1) || '/';
-    if (hash) {
-      setCurrentPath(hash);
-      parseParams(hash);
-    }
-  }, []);
-  
   // Parse params from path (e.g., /schemes/:id -> /schemes/abc123)
   function parseParams(path: string) {
     const paramsMap: Record<string, string> = {};
@@ -36,13 +29,20 @@ export function RouterProvider({ children }: { children: ReactNode }) {
     }
     setParams(paramsMap);
   }
+
+  // Initialize from current hash on mount
+  useEffect(() => {
+    const hash = window.location.hash.slice(1) || '/';
+    setCurrentPath(hash || '/');
+    parseParams(hash || '/');
+  }, []);
   
   // Listen for hash changes
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1) || '/';
-      setCurrentPath(hash);
-      parseParams(hash);
+      setCurrentPath(hash || '/');
+      parseParams(hash || '/');
     };
     
     window.addEventListener('hashchange', handleHashChange);
@@ -50,29 +50,30 @@ export function RouterProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const navigate = useCallback((path: string) => {
-    window.location.hash = path;
-    // Force update immediately for better responsiveness
-    setCurrentPath(path);
-    parseParams(path);
+    const cleanPath = path.startsWith('/') ? path : '/' + path;
+    window.location.hash = cleanPath;
+    setCurrentPath(cleanPath);
+    parseParams(cleanPath);
   }, []);
 
   return (
-    <RouterContext.Provider value={{ currentPath, params }}>
+    <RouterContext.Provider value={{ currentPath, params, navigate }}>
       {children}
     </RouterContext.Provider>
   );
 }
 
 export function useRouter() {
-  const { currentPath } = useContext(RouterContext);
-  return { currentPath };
+  const context = useContext(RouterContext);
+  return { 
+    currentPath: context.currentPath, 
+    params: context.params,
+    navigate: context.navigate 
+  };
 }
 
 export function useNavigate() {
-  const { params } = useContext(RouterContext);
-  const navigate = useCallback((path: string) => {
-    window.location.hash = path;
-  }, []);
+  const { navigate } = useContext(RouterContext);
   return navigate;
 }
 
@@ -87,9 +88,12 @@ export function Link({ to, children, className, onClick }: {
   className?: string;
   onClick?: () => void;
 }) {
+  const { navigate } = useContext(RouterContext);
+  
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    window.location.hash = to;
+    const cleanPath = to.startsWith('/') ? to : '/' + to;
+    navigate(cleanPath);
     onClick?.();
   };
 
