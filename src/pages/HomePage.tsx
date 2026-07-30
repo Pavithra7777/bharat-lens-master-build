@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from '../lib/Router';
 import { useApp } from '../lib/AppContext';
-import db from '../lib/db';
+import { db } from '@doable/data';
 import { translations } from '../lib/i18n';
-import { Bell, Search, Shield, ChevronRight, Mic, Camera, FileText, Loader2, LogOut } from 'lucide-react';
+import { Bell, Search, Shield, ChevronRight, Mic, Camera, FileText, Users, AlertTriangle, Loader2, Bookmark, ExternalLink } from 'lucide-react';
+
 
 interface Reminder {
   id: string;
   title: string;
   due_date: string;
-  owner_id: string | null;
-  created_by: string;
-  category?: string;
-  status?: string;
-  description?: string | null;
-  scheme_name?: string | null;
+  scheme_name: string | null;
+  category: string;
+  status: string;
+  description: string | null;
 }
 
 interface Scheme {
@@ -31,12 +30,11 @@ interface Scheme {
 
 export function HomePage() {
   const navigate = useNavigate();
-  const { user, profile, simpleMode, language, logout } = useApp();
+  const { user, profile, simpleMode, language } = useApp();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const t = translations[language];
 
   useEffect(() => {
@@ -47,32 +45,21 @@ export function HomePage() {
     if (!user) { setLoading(false); return; }
     setLoading(true);
     try {
-      const reminderData = await db.getReminders();
-      const schemeData = await db.getSchemes();
-
-      setReminders(reminderData.filter(r => !r.is_completed).slice(0, 5));
-      setSchemes(schemeData.map(s => ({
-        id: s.id,
-        name: s.title,
-        category: s.category,
-        description: s.description || '',
-        benefits: s.short_benefit || '',
-        eligibility: (s.category_eligible || []).join(', '),
-        deadline: null,
-        tag: s.tags || [],
-        official_link: s.official_url || s.apply_url,
-      })));
+      const remindersRes = await db.query<Reminder>(
+        `SELECT * FROM reminders WHERE created_by = $1 AND is_completed = false ORDER BY due_date ASC LIMIT 5`,
+        [user.id]
+      );
+      const schemesRes = await db.query<Scheme>(
+        `SELECT id, title as name, category, description, short_benefit as benefits, null as deadline, tags as tag, official_url as official_link FROM schemes WHERE is_active = true ORDER BY created_at DESC LIMIT 6`,
+        []
+      );
+      if (remindersRes.ok && remindersRes.rows) setReminders(remindersRes.rows);
+      if (schemesRes.ok && schemesRes.rows) setSchemes(schemesRes.rows);
     } catch (error) {
-      if (error?.code !== 'PGRST205') console.error('Home data load failed:', error);
+      console.error('Home data load failed:', error);
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleLogout() {
-    await logout();
-    setShowLogoutConfirm(false);
-    window.location.hash = '/';
   }
 
   const greeting = getGreeting();
@@ -92,7 +79,7 @@ export function HomePage() {
             <p className="text-white/70 text-sm">{greeting}</p>
             <h1 className="text-xl font-semibold mt-1">{profile?.full_name || (simpleMode ? 'नमस्ते' : 'Hello')}</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button onClick={() => navigate('/reminders')} className="relative p-2 rounded-full bg-white/10 hover:bg-white/20">
               <Bell className="w-5 h-5" />
               {reminders.length > 0 && (
@@ -100,9 +87,6 @@ export function HomePage() {
                   {reminders.length}
                 </span>
               )}
-            </button>
-            <button onClick={() => setShowLogoutConfirm(true)} className="p-2 rounded-full bg-white/10 hover:bg-white/20" title="Sign Out">
-              <LogOut className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -214,23 +198,6 @@ export function HomePage() {
           </>
         )}
       </div>
-
-      {/* Logout Confirmation Modal */}
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-6 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <LogOut className="w-8 h-8 text-red-600" />
-            </div>
-            <h3 className="text-lg font-bold text-[#1A1A2E] text-center mb-2">Sign Out?</h3>
-            <p className="text-gray-500 text-center mb-6">Are you sure you want to sign out of Bharat Lens?</p>
-            <div className="flex gap-3">
-              <button onClick={() => setShowLogoutConfirm(false)} className="flex-1 py-3 border-2 border-gray-200 rounded-xl font-medium">Cancel</button>
-              <button onClick={handleLogout} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-medium">Sign Out</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

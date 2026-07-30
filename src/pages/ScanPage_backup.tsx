@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react';
-import { useNavigate } from '../lib/Router';
+import { useRouter } from '../lib/Router';
 import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckCircle, AlertCircle, Camera, Sparkles, MessageCircle, Search, FileCheck, ChevronDown, ChevronUp, Eye } from 'lucide-react';
 import { createDoableClient } from '@doable/sdk';
-import db from '../lib/db';
+import { db } from '@doable/data';
 
 interface SchemeResult {
   name: string;
@@ -32,7 +32,7 @@ export function ScanPage() {
   const [expandedScheme, setExpandedScheme] = useState<number | null>(null);
   const [rawResponse, setRawResponse] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const navigate = useNavigate();
+  const { navigate } = useRouter();
 
   async function analyzeWithAI(imageData: string | null, textData: string) {
     setProcessing(true);
@@ -387,23 +387,27 @@ Return your response as a JSON object:
       
       const description = result.summary || result.extracted_text?.substring(0, 200) || 'Analyzed document';
       
-      const r = await db.addVaultItem({
-        title,
-        description,
-        category: 'scan',
-        item_type: 'scan_result',
-        metadata: {
-          extracted_text: result.extracted_text,
-          schemes_found: result.schemes_found,
-          is_scam: result.is_scam,
-          scam_warnings: result.scam_warnings,
-          recommendations: result.recommendations,
-          document_type: result.document_type,
-          saved_at: new Date().toISOString(),
-        },
-      });
+      const r = await db.query(
+        `INSERT INTO vault_items (title, description, category, item_type, metadata) 
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [
+          title,
+          description,
+          'scan',
+          'scan_result',
+          JSON.stringify({
+            extracted_text: result.extracted_text,
+            schemes_found: result.schemes_found,
+            is_scam: result.is_scam,
+            scam_warnings: result.scam_warnings,
+            recommendations: result.recommendations,
+            document_type: result.document_type,
+            saved_at: new Date().toISOString()
+          })
+        ]
+      );
       
-      if (r) {
+      if (r.ok) {
         setSaveSuccess('Saved to Vault!');
         setTimeout(() => setSaveSuccess(''), 3000);
       } else {

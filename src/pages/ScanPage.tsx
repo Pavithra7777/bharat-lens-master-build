@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from '../lib/Router';
+import { useRouter } from '../lib/Router';
 import { Upload, FileText, X, Loader2, Save, AlertTriangle, ExternalLink, CheckCircle, AlertCircle, Camera, Sparkles, MessageCircle, Search, FileCheck, ChevronDown, ChevronUp, Eye, Shield, Link as LinkIcon, Info, Clock, Ban, Globe } from 'lucide-react';
-import { createDoableClient } from '@doable/sdk';
-import db from '../lib/db';
+import { db } from '@doable/data';
 
+const AZURE_VISION_KEY = 'Fl2AbOqkbelMbWe6oGbxZtDVhoND2XOf7o1lExllXkWY9PIYjLEaJQQJ99CGACGhslBXJ3w3AAAFACOGJv24';
+const AZURE_VISION_ENDPOINT = 'https://internshipvisionapi.cognitiveservices.azure.com';
 
 // Helper function to check if a string is a valid URL
 function isValidUrl(urlString: string): boolean {
@@ -324,7 +325,7 @@ export function ScanPage() {
   const [expandedScheme, setExpandedScheme] = useState<number | null>(null);
   const [urlValidationStatus, setUrlValidationStatus] = useState<Record<number, 'checking' | 'valid' | 'invalid' | 'unchecked'>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const navigate = useNavigate();
+  const { navigate } = useRouter();
 
   // Check if an apply URL is accessible
   async function checkApplyUrl(url: string): Promise<boolean> {
@@ -383,76 +384,78 @@ export function ScanPage() {
   }
 
 
-  async function extractTextWithVision(imageData: string): Promise<string> {
+  async function extractTextWithAzure(imageData: string): Promise<string> {
     const base64Image = imageData.includes(',') ? (imageData.split(',')[1] || imageData) : imageData;
-    const doable = createDoableClient();
-    const prompt = 'Please extract ALL readable text from this image exactly as it appears. Preserve line breaks and formatting. If there are tables, extract them as text rows. Include any scheme names, government departments, dates, eligibility criteria, benefits, and official links you can identify.';
-
-    // Try OpenAI Vision first
-    try {
-      const result = await doable.integrations.run('openai', 'vision_prompt', {
-        image: base64Image,
-        prompt,
-      });
-      if (result?.success && result?.data) {
-        const raw = result.data as any;
-        const text = typeof raw === 'string'
-          ? raw
-          : (raw?.text ?? raw?.content ?? JSON.stringify(raw));
-        if (text && text.trim().length > 0) {
-          return text.trim();
-        }
-      }
-    } catch (e) {
-      console.warn('OpenAI vision failed, trying Groq:', e);
+    const byteCharacters = atob(base64Image);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
+    const byteArray = new Uint8Array(byteNumbers);
+    const imageBlob = new Blob([byteArray], { type: 'image/jpeg' });
 
-    // Fallback: Try Groq vision if available (Llama vision models)
     try {
-      const result = await doable.integrations.run('groq', 'chat_completion', {
-        model: 'llama-3.2-11b-vision-preview',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Image}` } }
-            ]
+      const readResponse = await fetch(AZURE_VISION_ENDPOINT + '/vision/v3.2/read/analyze?language=en', {
+        method: 'POST',
+        headers: {
+          'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY,
+          'Content-Type': 'application/octet-stream'
+        },
+        body: imageBlob
+      });
+
+      if (readResponse.ok) {
+        const operationLocation = readResponse.headers.get('Operation-Location');
+        if (operationLocation) {
+          for (let i = 0; i < 15; i++) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const statusResponse = await fetch(operationLocation, {
+              headers: { 'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY }
+            });
+            const statusData = await statusResponse.json();
+            if (statusData.status === 'succeeded') {
+              const lines = statusData.analyzeResult?.readResults?.map((r: any) => 
+                r.lines?.map((l: any) => l.text).join('\n') || ''
+              ).join('\n') || '';
+              return lines.trim();
+            } else if (statusData.status === 'failed') {
+              break;
+            }
           }
-        ],
-        max_tokens: 2048,
-      });
-      if (result?.success && result?.data) {
-        const raw2 = result.data as any;
-        const content = raw2?.choices?.[0]?.message?.content;
-        if (content && typeof content === 'string' && content.trim().length > 0) {
-          return content.trim();
         }
       }
     } catch (e) {
-      console.warn('Groq vision failed, trying Gemini:', e);
+      console.log('Read API failed, trying OCR...');
     }
 
-    // Final fallback: Try Google Gemini
-    try {
-      const geminiResult = await doable.integrations.run('google_gemini', 'generate_content', {
-        prompt: `Analyze this image and extract ALL readable text exactly as it appears. Include any scheme names, government departments, dates, eligibility criteria, benefits, and official links.\n\n${prompt}`,
-        model: 'gemini-1.5-flash',
-      });
-      if (geminiResult?.success && geminiResult?.data) {
-        const raw3 = geminiResult.data as any;
-        const text = typeof raw3 === 'string'
-          ? raw3
-          : (raw3?.text ?? JSON.stringify(raw3));
-        if (text && text.trim().length > 0) {
-          return text.trim();
+    const ocrResponse = await fetch(AZURE_VISION_ENDPOINT + '/vision/v3.2/ocr?language=unk&detectOrientation=true', {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': AZURE_VISION_KEY,
+        'Content-Type': 'application/octet-stream'
+      },
+      body: imageBlob
+    });
+
+    if (!ocrResponse.ok) {
+      throw new Error('Azure OCR failed: ' + ocrResponse.status);
+    }
+
+    const ocrResult = await ocrResponse.json();
+    let extractedText = '';
+    
+    if (ocrResult.regions) {
+      for (const region of ocrResult.regions) {
+        for (const line of region.lines) {
+          for (const word of line.words) {
+            extractedText += word.text + ' ';
+          }
+          extractedText += '\n';
         }
       }
-    } catch (e) {
-      console.warn('Gemini fallback failed:', e);
     }
-
-    throw new Error('Failed to analyze text. Please try again.');
+    
+    return extractedText.trim();
   }
 
   function detectScamPatterns(text: string): { isScam: boolean; score: number; warnings: string[] } {
@@ -535,8 +538,8 @@ export function ScanPage() {
       let extractedText = textData;
 
       if (imageData) {
-        setStage('Extracting text with AI Vision......');
-        extractedText = await extractTextWithVision(imageData);
+        setStage('Extracting text with Azure Vision...');
+        extractedText = await extractTextWithAzure(imageData);
         setExtractedText(extractedText);
 
         if (!extractedText) {
@@ -615,7 +618,7 @@ export function ScanPage() {
       }
 
     } catch (err: any) {
-      if (err?.code !== 'PGRST205') console.error('Analysis error:', err);
+      console.error('Analysis error:', err);
       setError('Analysis failed: ' + (err.message || 'Please check your internet connection and try again.'));
       setResult({
         is_scam: false,
@@ -691,21 +694,25 @@ export function ScanPage() {
         document_type: result.document_type || 'unknown',
         is_scam: result.is_scam || false,
       };
-      const r = await db.addVaultItem({
-        title: result.summary || 'Scanned Document',
-        description: result.extracted_text?.substring(0, 200) || '',
-        category: result.document_type || 'document',
-        item_type: 'scan_result',
-        metadata,
-      });
-      if (r) {
+      const r = await db.query(
+        `INSERT INTO vault_items (title, description, category, item_type, metadata)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          result.summary || 'Scanned Document',
+          result.extracted_text?.substring(0, 200) || '',
+          result.document_type || 'document',
+          'scan_result',
+          JSON.stringify(metadata)
+        ]
+      );
+      if (r.ok) {
         setSaveSuccess('Saved successfully!');
         setTimeout(() => setSaveSuccess(''), 3000);
       } else {
-        setError('Save failed: Could not save to database');
+        setError('Save failed: ' + (r.error?.message || 'Database error'));
       }
     } catch (e: any) {
-      if (e?.code !== 'PGRST205') console.error('Save failed:', e);
+      console.error('Save failed:', e);
       setError('Save failed: ' + (e.message || 'Unknown error'));
     }
     setSaving(false);

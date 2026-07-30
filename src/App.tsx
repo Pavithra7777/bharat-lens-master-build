@@ -21,7 +21,6 @@ import { ScamPage } from './pages/ScamPage';
 import { FamilyPage } from './pages/FamilyPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { MigrationPage } from './pages/MigrationPage';
-import UrlReport from './pages/UrlReport';
 
 // Bottom Navigation Items
 const NAV_ITEMS = [
@@ -45,34 +44,6 @@ const NAV_ITEMS_FULL = [
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 
-// Loading component - simple spinner
-function LoadingScreen() {
-  return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#FAFBFC',
-      fontFamily: 'system-ui, sans-serif'
-    }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{
-          width: 48,
-          height: 48,
-          border: '4px solid rgba(27, 58, 107, 0.2)',
-          borderTopColor: '#1B3A6B',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-          margin: '0 auto 12px'
-        }} />
-        <p style={{ color: '#6B7280', fontSize: 14 }}>Loading...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </div>
-  );
-}
-
 function AppContent() {
   const { user, isLoading, profile, simpleMode } = useApp();
   const { currentPath } = useRouter();
@@ -82,7 +53,7 @@ function AppContent() {
   // Check if current page should show bottom nav (hide on detail pages)
   const isDetailPage = currentPath.startsWith('/schemes/') && currentPath.length > 9;
   
-  // Redirect to home when user logs in
+  // Redirect to home when user logs in (more robust tracking)
   useEffect(() => {
     if (prevUserRef.current === null && user !== null) {
       window.location.hash = '/';
@@ -92,28 +63,32 @@ function AppContent() {
 
   const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
 
-  // Show loading while checking auth
   if (isLoading) {
-    return <LoadingScreen />;
+    return (
+      <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
-  // Show auth page if not logged in
   if (!user) {
     return <AuthPage />;
   }
 
-  // Show onboarding if profile not completed
   if (!profile?.onboarding_completed) {
     return <OnboardingPage />;
   }
 
-  // Main app
   return (
     <div className={simpleMode ? 'simple-mode' : ''}>
       <div className={isDetailPage ? '' : 'pb-20'}>
         <PageRouter currentPath={currentPath} />
       </div>
 
+      {/* Hide bottom nav on detail pages */}
       {!isDetailPage && (
         <>
           <nav className="bottom-nav">
@@ -198,6 +173,7 @@ function AppContent() {
 }
 
 function PageRouter({ currentPath }: { currentPath: string }) {
+  // Handle scheme detail route
   if (currentPath.startsWith('/schemes/') && currentPath.length > 9) {
     return <SchemeDetailPage />;
   }

@@ -371,17 +371,3 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
 }
-
-/* Utility classes */
-.min-h-screen {
-  min-height: 100vh;
-}
-
-body {
-  margin: 0;
-  padding: 0;
-}
-
-#root {
-  min-height: 100vh;
-}
