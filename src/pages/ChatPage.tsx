@@ -102,7 +102,7 @@ export function ChatPage() {
       const doable = createDoableClient();
       await doable.voice.speak(text);
     } catch (e) {
-      console.error('TTS error:', e);
+      if (e?.code !== 'PGRST205') console.error('TTS error:', e);
     } finally {
       setSpeaking(false);
     }

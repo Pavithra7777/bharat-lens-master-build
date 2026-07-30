@@ -69,7 +69,19 @@ export function OnboardingPage() {
       window.location.reload();
     } catch (error) {
       console.error('Onboarding update failed:', error);
-      setLoading(false);
+      // Even if DB update fails, proceed with local state
+      // so user can get into the app
+      setProfile({
+        ...profile,
+        full_name: name.trim(),
+        state,
+        occupation_category: occupation,
+        preferred_language: language,
+        onboarding_completed: true,
+      });
+      setAppLanguage(language);
+      window.location.hash = '/';
+      window.location.reload();
     }
   }
 

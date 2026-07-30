@@ -128,7 +128,7 @@ export function SchemesPage() {
         setLastLiveUpdate(update);
       }
     } catch (error) {
-      console.error('Failed to load update info:', error);
+      if (error?.code !== 'PGRST205') console.error('Failed to load update info:', error);
     }
   }
 
@@ -138,7 +138,7 @@ export function SchemesPage() {
       const data = await db.getSchemes();
       setSchemes(data);
     } catch (error) {
-      console.error('Failed to load schemes:', error);
+      if (error?.code !== 'PGRST205') console.error('Failed to load schemes:', error);
     } finally {
       setLoading(false);
     }
@@ -182,7 +182,7 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
           });
         }
       } catch (e) {
-        console.error('Failed to parse AI response:', e);
+        if (e?.code !== 'PGRST205') console.error('Failed to parse AI response:', e);
         await db.addLiveSchemeUpdate({
           status: 'failed',
           schemes_found_count: 0,
@@ -191,7 +191,7 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
         });
       }
     } catch (error) {
-      console.error('Failed to fetch live updates:', error);
+      if (error?.code !== 'PGRST205') console.error('Failed to fetch live updates:', error);
     } finally {
       setLiveUpdating(false);
     }
@@ -246,8 +246,46 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
       filtered = filtered.filter(s => selectedCategories.some(cat => matchesCategorySingle(s, cat)));
     }
     
+    // Gender filter
+    if (selectedGender) {
+      const genderLower = selectedGender.toLowerCase();
+      filtered = filtered.filter(s => {
+        const schemeGender = s.gender?.toLowerCase() || '';
+        return !schemeGender || schemeGender === genderLower || schemeGender === 'all' || schemeGender === 'female' && genderLower === 'female' || schemeGender === 'male' && genderLower === 'male';
+      });
+    }
+    
+    // State filter
+    if (selectedState) {
+      const stateLower = selectedState.toLowerCase();
+      filtered = filtered.filter(s => {
+        const states = s.applicable_states?.map(st => st.toLowerCase()) || [];
+        return states.some(st => st.includes(stateLower) || stateLower.includes(st)) || states.includes('all india');
+      });
+    }
+    
+    // Income filter
+    if (selectedIncome) {
+      const incomeLimit = parseInt(selectedIncome);
+      if (!isNaN(incomeLimit)) {
+        filtered = filtered.filter(s => !s.income_limit || s.income_limit >= incomeLimit);
+      }
+    }
+    
+    // Age filter
+    if (selectedAge) {
+      const age = parseInt(selectedAge);
+      if (!isNaN(age)) {
+        filtered = filtered.filter(s => {
+          const minOk = !s.min_age || s.min_age <= age;
+          const maxOk = !s.max_age || s.max_age >= age;
+          return minOk && maxOk;
+        });
+      }
+    }
+    
     return filtered;
-  }, [filteredByTab, search, selectedCategories]);
+  }, [filteredByTab, search, selectedCategories, selectedGender, selectedState, selectedIncome, selectedAge]);
 
   // Fixed category counts - count schemes matching each category
   const categoryCounts = useMemo(() => {
@@ -367,16 +405,89 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
 
       {/* Search Bar */}
       <div className="px-6 py-4 bg-white border-b border-gray-200">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search schemes..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-xl border-0 focus:ring-2 focus:ring-[#1B3A6B] focus:bg-white transition"
-          />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search schemes..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 bg-gray-100 rounded-xl border-0 focus:ring-2 focus:ring-[#1B3A6B] focus:bg-white transition"
+            />
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`px-4 py-3 rounded-xl border-0 flex items-center gap-2 transition ${showFilters ? 'bg-[#1B3A6B] text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          >
+            <SlidersHorizontal className="w-5 h-5" />
+            <span className="text-sm font-medium hidden sm:inline">Filters</span>
+          </button>
         </div>
+        
+        {/* Filter Panel */}
+        {showFilters && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* Gender Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Gender</label>
+                <select
+                  value={selectedGender}
+                  onChange={(e) => setSelectedGender(e.target.value)}
+                  className="w-full px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-[#1B3A6B]"
+                >
+                  <option value="">All</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="all">All Gender</option>
+                </select>
+              </div>
+              {/* State Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">State</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Maharashtra"
+                  value={selectedState}
+                  onChange={(e) => setSelectedState(e.target.value)}
+                  className="w-full px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-[#1B3A6B]"
+                />
+              </div>
+              {/* Income Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Max Income (₹)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 250000"
+                  value={selectedIncome}
+                  onChange={(e) => setSelectedIncome(e.target.value)}
+                  className="w-full px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-[#1B3A6B]"
+                />
+              </div>
+              {/* Age Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Your Age</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 25"
+                  value={selectedAge}
+                  onChange={(e) => setSelectedAge(e.target.value)}
+                  className="w-full px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-[#1B3A6B]"
+                />
+              </div>
+            </div>
+            {/* Clear all filters */}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => { setSelectedCategories(['all']); setSelectedGender(''); setSelectedState(''); setSelectedIncome(''); setSelectedAge(''); setSearch(''); }}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 font-medium"
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+        )}
         
         {/* Category Pills */}
         <div className="flex gap-2 mt-4 overflow-x-auto pb-2 scrollbar-hide">
@@ -394,12 +505,10 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
                   } else {
                     const newCats = selectedCategories.filter(c => c !== 'all');
                     if (isSelected) {
-                      setSelectedCategories(newCats.filter(c => c !== cat.id));
+                      const remaining = newCats.filter(c => c !== cat.id);
+                      setSelectedCategories(remaining.length === 0 ? ['all'] : remaining);
                     } else {
                       setSelectedCategories([...newCats, cat.id]);
-                    }
-                    if (selectedCategories.length === 0 && !isSelected) {
-                      setSelectedCategories([cat.id]);
                     }
                   }
                 }}
@@ -439,7 +548,7 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
             </div>
             <p className="text-gray-600">No schemes found matching your criteria</p>
             <button 
-              onClick={() => { setSearch(''); setSelectedCategories(['all']); }}
+              onClick={() => { setSearch(''); setSelectedCategories(['all']); setSelectedGender(''); setSelectedState(''); setSelectedIncome(''); setSelectedAge(''); }}
               className="mt-4 text-[#1B3A6B] font-medium"
             >
               Clear filters

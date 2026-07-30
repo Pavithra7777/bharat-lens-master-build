@@ -44,7 +44,7 @@ export function ApplicationsPage() {
       const data = await db.getApplications();
       setApplications(data.filter(app => app.owner_id === profile.id || app.owner_id === profile?.id));
     } catch (error) {
-      console.error('Load applications failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Load applications failed:', error);
     } finally {
       setLoading(false);
     }
@@ -55,7 +55,7 @@ export function ApplicationsPage() {
       const data = await db.getChecklistItems(appId);
       setChecklist(data);
     } catch (error) {
-      console.error('Load checklist failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Load checklist failed:', error);
     }
   }
 
@@ -66,7 +66,7 @@ export function ApplicationsPage() {
       await db.updateChecklistItem(itemId, { is_completed: !item.is_completed });
       setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, is_completed: !i.is_completed } : i));
     } catch (error) {
-      console.error('Toggle failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Toggle failed:', error);
     }
   }
 
@@ -78,7 +78,7 @@ export function ApplicationsPage() {
       ));
       if (selectedApp) setSelectedApp({ ...selectedApp, status: newStatus });
     } catch (error) {
-      console.error('Update status failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Update status failed:', error);
     }
   }
 
@@ -89,7 +89,7 @@ export function ApplicationsPage() {
       setApplications(prev => prev.filter(a => a.id !== appId));
       setSelectedApp(null);
     } catch (error) {
-      console.error('Delete failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Delete failed:', error);
     }
   }
 

@@ -23,6 +23,18 @@ function getSupabase() {
   return supabase;
 }
 
+// Helper to check if error is "table not found in schema cache" (expected before migration)
+function isSchemaNotReady(error: any): boolean {
+  return error?.code === 'PGRST205' || error?.message?.includes('schema cache');
+}
+
+// Suppresses expected schema-not-ready errors so console stays clean
+function safeError(label: string, error: any) {
+  if (!isSchemaNotReady(error)) {
+    console.error(label, error);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // Types (matching Supabase schema)
 // ─────────────────────────────────────────────────────────────
@@ -233,29 +245,49 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     let q = client.from('schemes').select('*').order('created_at', { ascending: false });
-    if (state) q = q.or(`state.ilike.%${state}%,state.is.null`);
+    if (state) q = q.eq(`applicable_states.cs.{${state}}`);
     const { data, error } = await q;
-    if (error) { console.error('getSchemes error:', error); return []; }
-    return (data as Scheme[]) || [];
+    if (error) { safeError('getSchemes error:', error); return []; }
+    // Map DB columns to interface fields the UI expects
+    return (data || []).map((s: any) => ({
+      ...s,
+      name: s.title,
+      benefits: s.short_benefit || s.benefit_type || '',
+      how_to_apply: Array.isArray(s.application_mode) ? s.application_mode.join(', ') : (s.application_mode || ''),
+    })) as Scheme[];
   },
 
   async getSchemeById(id: string): Promise<Scheme | null> {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('schemes').select('*').eq('id', id).single();
-    if (error) { console.error('getSchemeById error:', error); return null; }
-    return data as Scheme | null;
+    if (error) { safeError('getSchemeById error:', error); return null; }
+    if (!data) return null;
+    // Map DB columns to interface fields the UI expects
+    const s: any = data;
+    return {
+      ...data,
+      name: s.title,
+      benefits: s.short_benefit || s.benefit_type || '',
+      how_to_apply: Array.isArray(s.application_mode) ? s.application_mode.join(', ') : (s.application_mode || ''),
+    } as Scheme;
   },
 
   async searchSchemes(query: string, category?: string): Promise<Scheme[]> {
     const client = getSupabase();
     if (!client) return [];
     let q = client.from('schemes').select('*')
-      .or(`name.ilike.%${query}%,description.ilike.%${query}%,eligibility.ilike.%${query}%`);
+      .or(`title.ilike.%${query}%,description.ilike.%${query}%`);
     if (category) q = q.eq('category', category);
     const { data, error } = await q;
-    if (error) { console.error('searchSchemes error:', error); return []; }
-    return (data as Scheme[]) || [];
+    if (error) { safeError('searchSchemes error:', error); return []; }
+    // Map DB columns to interface fields the UI expects
+    return (data || []).map((s: any) => ({
+      ...s,
+      name: s.title,
+      benefits: s.short_benefit || s.benefit_type || '',
+      how_to_apply: Array.isArray(s.application_mode) ? s.application_mode.join(', ') : (s.application_mode || ''),
+    })) as Scheme[];
   },
 
   // ── Vault Items ────────────────────────────────────────────
@@ -267,7 +299,7 @@ const db = {
       .from('vault_items')
       .select('id, title, description, category, item_type, metadata, created_at')
       .order('created_at', { ascending: false });
-    if (error) { console.error('getVaultItems error:', error); return []; }
+    if (error) { safeError('getVaultItems error:', error); return []; }
     return (data as VaultItem[]) || [];
   },
 
@@ -279,7 +311,7 @@ const db = {
       .insert(item as VaultItem)
       .select('id, title, description, category, item_type, metadata, created_at')
       .single();
-    if (error) { console.error('addVaultItem error:', error); return null; }
+    if (error) { safeError('addVaultItem error:', error); return null; }
     return data as VaultItem | null;
   },
 
@@ -287,7 +319,7 @@ const db = {
     const client = getSupabase();
     if (!client) return false;
     const { error } = await client.from('vault_items').delete().eq('id', id);
-    if (error) { console.error('deleteVaultItem error:', error); return false; }
+    if (error) { safeError('deleteVaultItem error:', error); return false; }
     return true;
   },
 
@@ -297,7 +329,7 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     const { data, error } = await client.from('reminders').select('*').order('created_at', { ascending: false });
-    if (error) { console.error('getReminders error:', error); return []; }
+    if (error) { safeError('getReminders error:', error); return []; }
     return (data as Reminder[]) || [];
   },
 
@@ -305,7 +337,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('reminders').insert(reminder as Reminder).select().single();
-    if (error) { console.error('addReminder error:', error); return null; }
+    if (error) { safeError('addReminder error:', error); return null; }
     return data as Reminder | null;
   },
 
@@ -313,7 +345,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('reminders').update(updates as Reminder).eq('id', id).select().single();
-    if (error) { console.error('updateReminder error:', error); return null; }
+    if (error) { safeError('updateReminder error:', error); return null; }
     return data as Reminder | null;
   },
 
@@ -321,7 +353,7 @@ const db = {
     const client = getSupabase();
     if (!client) return false;
     const { error } = await client.from('reminders').delete().eq('id', id);
-    if (error) { console.error('deleteReminder error:', error); return false; }
+    if (error) { safeError('deleteReminder error:', error); return false; }
     return true;
   },
 
@@ -331,7 +363,7 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     const { data, error } = await client.from('applications').select('*').order('created_at', { ascending: false });
-    if (error) { console.error('getApplications error:', error); return []; }
+    if (error) { safeError('getApplications error:', error); return []; }
     return (data as Application[]) || [];
   },
 
@@ -339,7 +371,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('applications').insert(application as Application).select().single();
-    if (error) { console.error('addApplication error:', error); return null; }
+    if (error) { safeError('addApplication error:', error); return null; }
     return data as Application | null;
   },
 
@@ -347,7 +379,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('applications').update(updates as Application).eq('id', id).select().single();
-    if (error) { console.error('updateApplication error:', error); return null; }
+    if (error) { safeError('updateApplication error:', error); return null; }
     return data as Application | null;
   },
 
@@ -355,7 +387,7 @@ const db = {
     const client = getSupabase();
     if (!client) return false;
     const { error } = await client.from('applications').delete().eq('id', id);
-    if (error) { console.error('deleteApplication error:', error); return false; }
+    if (error) { safeError('deleteApplication error:', error); return false; }
     return true;
   },
 
@@ -367,7 +399,7 @@ const db = {
     let q = client.from('checklist_items').select('*').order('created_at', { ascending: false });
     if (applicationId) q = q.eq('application_id', applicationId);
     const { data, error } = await q;
-    if (error) { console.error('getChecklistItems error:', error); return []; }
+    if (error) { safeError('getChecklistItems error:', error); return []; }
     return (data as ChecklistItem[]) || [];
   },
 
@@ -375,7 +407,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('checklist_items').insert(item as ChecklistItem).select().single();
-    if (error) { console.error('addChecklistItem error:', error); return null; }
+    if (error) { safeError('addChecklistItem error:', error); return null; }
     return data as ChecklistItem | null;
   },
 
@@ -383,7 +415,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('checklist_items').update(updates as ChecklistItem).eq('id', id).select().single();
-    if (error) { console.error('updateChecklistItem error:', error); return null; }
+    if (error) { safeError('updateChecklistItem error:', error); return null; }
     return data as ChecklistItem | null;
   },
 
@@ -393,15 +425,18 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     const { data, error } = await client.from('family_groups').select('*').order('created_at', { ascending: false });
-    if (error) { console.error('getFamilyGroups error:', error); return []; }
+    if (error) { safeError('getFamilyGroups error:', error); return []; }
     return (data as FamilyGroup[]) || [];
   },
 
   async addFamilyGroup(group: Partial<FamilyGroup>): Promise<FamilyGroup | null> {
     const client = getSupabase();
     if (!client) return null;
-    const { data, error } = await client.from('family_groups').insert(group as FamilyGroup).select().single();
-    if (error) { console.error('addFamilyGroup error:', error); return null; }
+    // Map 'name' to 'group_name' for DB column
+    const dbGroup = { ...group, group_name: group.name || group.group_name };
+    delete (dbGroup as any).name;
+    const { data, error } = await client.from('family_groups').insert(dbGroup as FamilyGroup).select().single();
+    if (error) { safeError('addFamilyGroup error:', error); return null; }
     return data as FamilyGroup | null;
   },
 
@@ -409,7 +444,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('family_groups').select('*').eq('owner_id', ownerId).limit(1).single();
-    if (error) { console.error('getFamilyGroupByOwner error:', error); return null; }
+    if (error) { safeError('getFamilyGroupByOwner error:', error); return null; }
     return data as FamilyGroup | null;
   },
 
@@ -419,17 +454,25 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     let q = client.from('family_members').select('*').order('created_at', { ascending: false });
-    if (groupId) q = q.eq('group_id', groupId);
+    if (groupId) q = q.eq('family_group_id', groupId);
     const { data, error } = await q;
-    if (error) { console.error('getFamilyMembers error:', error); return []; }
+    if (error) { safeError('getFamilyMembers error:', error); return []; }
     return (data as FamilyMember[]) || [];
   },
 
   async addFamilyMember(member: Partial<FamilyMember>): Promise<FamilyMember | null> {
     const client = getSupabase();
     if (!client) return null;
-    const { data, error } = await client.from('family_members').insert(member as FamilyMember).select().single();
-    if (error) { console.error('addFamilyMember error:', error); return null; }
+    // Map interface fields to DB columns
+    const dbMember = {
+      family_group_id: member.group_id,
+      profile_id: member.profile_id,
+      relation: member.relationship || member.relation,
+      display_name: member.name || (member as any).display_name,
+      permissions: member.permissions || {},
+    };
+    const { data, error } = await client.from('family_members').insert(dbMember).select().single();
+    if (error) { safeError('addFamilyMember error:', error); return null; }
     return data as FamilyMember | null;
   },
 
@@ -437,7 +480,7 @@ const db = {
     const client = getSupabase();
     if (!client) return false;
     const { error } = await client.from('family_members').delete().eq('id', id);
-    if (error) { console.error('deleteFamilyMember error:', error); return false; }
+    if (error) { safeError('deleteFamilyMember error:', error); return false; }
     return true;
   },
 
@@ -447,15 +490,35 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     const { data, error } = await client.from('documents').select('*').order('created_at', { ascending: false });
-    if (error) { console.error('getDocuments error:', error); return []; }
-    return (data as Document[]) || [];
+    if (error) { safeError('getDocuments error:', error); return []; }
+    // Map DB columns back to interface fields
+    return (data || []).map((d: any) => ({
+      id: d.id,
+      created_by: d.created_by,
+      created_at: d.created_at,
+      title: d.original_filename || d.ai_summary || d.document_type || 'Untitled',
+      doc_type: d.document_type,
+      file_url: d.file_path,
+      expiry_date: d.expiry_date,
+      notes: d.ocr_extracted_text,
+      metadata: d.metadata,
+    })) as Document[];
   },
 
   async addDocument(doc: Partial<Document>): Promise<Document | null> {
     const client = getSupabase();
     if (!client) return null;
-    const { data, error } = await client.from('documents').insert(doc as Document).select().single();
-    if (error) { console.error('addDocument error:', error); return null; }
+    // Map interface fields to DB columns
+    const dbDoc: any = {
+      document_type: doc.doc_type || doc.title,
+      original_filename: doc.title,
+      file_path: doc.file_url,
+      expiry_date: doc.expiry_date,
+      ocr_extracted_text: doc.notes,
+      metadata: doc.metadata || {},
+    };
+    const { data, error } = await client.from('documents').insert(dbDoc).select().single();
+    if (error) { safeError('addDocument error:', error); return null; }
     return data as Document | null;
   },
 
@@ -463,7 +526,7 @@ const db = {
     const client = getSupabase();
     if (!client) return false;
     const { error } = await client.from('documents').delete().eq('id', id);
-    if (error) { console.error('deleteDocument error:', error); return false; }
+    if (error) { safeError('deleteDocument error:', error); return false; }
     return true;
   },
 
@@ -473,7 +536,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('profiles').select('*').eq('id', id).single();
-    if (error) { console.error('getProfile error:', error); return null; }
+    if (error) { safeError('getProfile error:', error); return null; }
     return data as Profile | null;
   },
 
@@ -481,7 +544,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('profiles').upsert(profile as Profile).select().single();
-    if (error) { console.error('upsertProfile error:', error); return null; }
+    if (error) { safeError('upsertProfile error:', error); return null; }
     return data as Profile | null;
   },
 
@@ -490,7 +553,7 @@ const db = {
     if (!client) return null;
     const updatesWithTs = { ...updates, updated_at: new Date().toISOString() };
     const { data, error } = await client.from('profiles').update(updatesWithTs as Profile).eq('id', id).select().single();
-    if (error) { console.error('updateProfile error:', error); return null; }
+    if (error) { safeError('updateProfile error:', error); return null; }
     return data as Profile | null;
   },
 
@@ -500,7 +563,7 @@ const db = {
     const client = getSupabase();
     if (!client) return [];
     const { data, error } = await client.from('chat_sessions').select('*').order('created_at', { ascending: false });
-    if (error) { console.error('getChatSessions error:', error); return []; }
+    if (error) { safeError('getChatSessions error:', error); return []; }
     return (data as ChatSession[]) || [];
   },
 
@@ -508,7 +571,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('chat_sessions').insert(session as ChatSession).select().single();
-    if (error) { console.error('addChatSession error:', error); return null; }
+    if (error) { safeError('addChatSession error:', error); return null; }
     return data as ChatSession | null;
   },
 
@@ -520,7 +583,7 @@ const db = {
       .select('*')
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true });
-    if (error) { console.error('getChatMessages error:', error); return []; }
+    if (error) { safeError('getChatMessages error:', error); return []; }
     return (data as ChatMessage[]) || [];
   },
 
@@ -528,7 +591,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('chat_messages').insert(message as ChatMessage).select().single();
-    if (error) { console.error('addChatMessage error:', error); return null; }
+    if (error) { safeError('addChatMessage error:', error); return null; }
     return data as ChatMessage | null;
   },
 
@@ -538,7 +601,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('scam_reports').insert(report as ScamReport).select().single();
-    if (error) { console.error('addScamReport error:', error); return null; }
+    if (error) { safeError('addScamReport error:', error); return null; }
     return data as ScamReport | null;
   },
 
@@ -546,7 +609,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('feedback').insert(feedback as Feedback).select().single();
-    if (error) { console.error('addFeedback error:', error); return null; }
+    if (error) { safeError('addFeedback error:', error); return null; }
     return data as Feedback | null;
   },
 
@@ -569,7 +632,7 @@ const db = {
     const client = getSupabase();
     if (!client) return null;
     const { data, error } = await client.from('live_scheme_updates').insert(update as LiveSchemeUpdate).select().single();
-    if (error) { console.error('addLiveSchemeUpdate error:', error); return null; }
+    if (error) { safeError('addLiveSchemeUpdate error:', error); return null; }
     return data as LiveSchemeUpdate | null;
   },
 };

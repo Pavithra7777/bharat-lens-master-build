@@ -32,7 +32,7 @@ export function RemindersPage() {
       const data = await db.getReminders();
       setReminders(data);
     } catch (error) {
-      console.error('Load reminders failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Load reminders failed:', error);
     } finally {
       setLoading(false);
     }
@@ -60,7 +60,7 @@ export function RemindersPage() {
         setShowAddModal(false);
       }
     } catch (error) {
-      console.error('Add reminder failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Add reminder failed:', error);
     }
   }
 
@@ -71,7 +71,7 @@ export function RemindersPage() {
         prev.map(rem => rem.id === id ? { ...rem, is_completed: !currentStatus } : rem)
       );
     } catch (error) {
-      console.error('Toggle complete failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Toggle complete failed:', error);
     }
   }
 
@@ -80,7 +80,7 @@ export function RemindersPage() {
       await db.deleteReminder(id);
       setReminders(prev => prev.filter(r => r.id !== id));
     } catch (error) {
-      console.error('Delete reminder failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Delete reminder failed:', error);
     }
   }
 

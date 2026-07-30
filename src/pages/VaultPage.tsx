@@ -49,7 +49,7 @@ export function VaultPage() {
         created_at: item.created_at,
       })));
     } catch (error) {
-      console.error('Load vault items failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Load vault items failed:', error);
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ export function VaultPage() {
       setItems(prev => prev.filter(item => item.id !== id));
       setSelectedItem(null);
     } catch (error) {
-      console.error('Delete failed:', error);
+      if (error?.code !== 'PGRST205') console.error('Delete failed:', error);
     }
   }
 
