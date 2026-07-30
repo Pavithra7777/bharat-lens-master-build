@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from '../lib/Router';
 import { Database, ArrowRight, Check, X, AlertCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
-import { db } from '@doable/data';
 import {
   checkSupabaseConnection,
   checkSupabaseTablesExist,
@@ -13,15 +12,6 @@ import {
   migrateReminders,
 } from '../lib/DataMigration';
 
-interface DataCounts {
-  schemes: number;
-  profiles: number;
-  vault_items: number;
-  family_groups: number;
-  family_members: number;
-  reminders: number;
-}
-
 interface MigrationStatus {
   status: 'idle' | 'checking' | 'migrating' | 'done' | 'error';
   message: string;
@@ -29,7 +19,6 @@ interface MigrationStatus {
 }
 
 export function MigrationPage() {
-  const [currentDbCounts, setCurrentDbCounts] = useState<DataCounts | null>(null);
   const [supabaseConnected, setSupabaseConnected] = useState(false);
   const [tablesReady, setTablesReady] = useState(false);
   const [migrationStatus, setMigrationStatus] = useState<MigrationStatus>({ status: 'idle', message: '' });
@@ -41,30 +30,6 @@ export function MigrationPage() {
 
   async function checkStatus() {
     setMigrationStatus({ status: 'checking', message: 'Checking database status...' });
-
-    const counts: DataCounts = { schemes: 0, profiles: 0, vault_items: 0, family_groups: 0, family_members: 0, reminders: 0 };
-    
-    try {
-      const [s, p, v, fg, fm, r] = await Promise.all([
-        db.query<{ count: number }>('SELECT COUNT(*) as count FROM schemes'),
-        db.query<{ count: number }>('SELECT COUNT(*) as count FROM profiles'),
-        db.query<{ count: number }>('SELECT COUNT(*) as count FROM vault_items'),
-        db.query<{ count: number }>('SELECT COUNT(*) as count FROM family_groups'),
-        db.query<{ count: number }>('SELECT COUNT(*) as count FROM family_members'),
-        db.query<{ count: number }>('SELECT COUNT(*) as count FROM reminders'),
-      ]);
-      
-      if (s.ok) counts.schemes = Number(s.rows[0]?.count || 0);
-      if (p.ok) counts.profiles = Number(p.rows[0]?.count || 0);
-      if (v.ok) counts.vault_items = Number(v.rows[0]?.count || 0);
-      if (fg.ok) counts.family_groups = Number(fg.rows[0]?.count || 0);
-      if (fm.ok) counts.family_members = Number(fm.rows[0]?.count || 0);
-      if (r.ok) counts.reminders = Number(r.rows[0]?.count || 0);
-      
-      setCurrentDbCounts(counts);
-    } catch (e) {
-      console.error('Error fetching counts:', e);
-    }
 
     const connected = await checkSupabaseConnection();
     setSupabaseConnected(connected);
@@ -93,52 +58,11 @@ export function MigrationPage() {
     const results: any = {};
 
     try {
-      setMigrationStatus({ status: 'migrating', message: 'Migrating schemes...' });
-      const schemesData = await db.query('SELECT * FROM schemes');
-      if (schemesData.ok && schemesData.rows) {
-        results.schemes = await migrateSchemes(schemesData.rows);
-      }
-
-      setMigrationStatus({ status: 'migrating', message: 'Migrating profiles...' });
-      const profilesData = await db.query('SELECT * FROM profiles');
-      if (profilesData.ok && profilesData.rows) {
-        results.profiles = await migrateProfiles(profilesData.rows);
-      }
-
-      setMigrationStatus({ status: 'migrating', message: 'Migrating vault items...' });
-      const vaultData = await db.query('SELECT * FROM vault_items');
-      if (vaultData.ok && vaultData.rows) {
-        results.vault_items = await migrateVaultItems(vaultData.rows);
-      }
-
-      setMigrationStatus({ status: 'migrating', message: 'Migrating family groups...' });
-      const fgData = await db.query('SELECT * FROM family_groups');
-      if (fgData.ok && fgData.rows) {
-        results.family_groups = await migrateFamilyGroups(fgData.rows);
-      }
-
-      setMigrationStatus({ status: 'migrating', message: 'Migrating family members...' });
-      const fmData = await db.query('SELECT * FROM family_members');
-      if (fmData.ok && fmData.rows) {
-        results.family_members = await migrateFamilyMembers(fmData.rows);
-      }
-
-      setMigrationStatus({ status: 'migrating', message: 'Migrating reminders...' });
-      const remData = await db.query('SELECT * FROM reminders');
-      if (remData.ok && remData.rows) {
-        results.reminders = await migrateReminders(remData.rows);
-      }
-
-      setMigrationResults(results);
-      
-      const totalMigrated = Object.values(results).reduce((sum: number, r: any) => sum + (r.migrated || 0), 0);
-      const totalFailed = Object.values(results).reduce((sum: number, r: any) => sum + (r.failed || 0), 0);
-      
+      setMigrationStatus({ status: 'migrating', message: 'Migration is a manual process. Please use the Supabase SQL Editor.' });
+      setMigrationResults({});
       setMigrationStatus({
         status: 'done',
-        message: totalFailed === 0 
-          ? `Successfully migrated ${totalMigrated} records!`
-          : `Migrated ${totalMigrated} records, ${totalFailed} failed`,
+        message: 'Supabase is connected. Please run the SQL schema in your Supabase dashboard.',
         details: results,
       });
     } catch (e: any) {
@@ -166,7 +90,7 @@ export function MigrationPage() {
             First, create tables in your Supabase database.
           </p>
           <a
-            href="/supabase_migration.sql"
+            href="/supabase_schema.sql"
             download
             className="inline-flex items-center gap-2 px-4 py-2 bg-[#1B3A6B] text-white rounded-xl font-medium hover:bg-[#2A4A8B] transition"
           >
@@ -183,7 +107,7 @@ export function MigrationPage() {
             <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">2</div>
             <h2 className="text-lg font-semibold text-[#1A1A2E]">Verify Connection</h2>
           </div>
-          
+
           <button
             onClick={checkStatus}
             disabled={migrationStatus.status === 'checking'}
@@ -209,36 +133,11 @@ export function MigrationPage() {
           </div>
         </div>
 
-        {currentDbCounts && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-            <h2 className="text-lg font-semibold text-[#1A1A2E] mb-4">Your Data ({currentDbCounts.schemes} schemes, {currentDbCounts.profiles} profiles)</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-50 rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-[#1B3A6B]">{currentDbCounts.schemes}</div>
-                <div className="text-sm text-gray-600">Schemes</div>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 text-center">
-                <div className="text-2xl font-bold text-[#1B3A6B]">{currentDbCounts.profiles}</div>
-                <div className="text-sm text-gray-600">Profiles</div>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
-          <h2 className="text-lg font-semibold text-[#1A1A2E] mb-4">Start Migration</h2>
-
-          <button
-            onClick={startMigration}
-            disabled={!tablesReady || migrationStatus.status === 'migrating'}
-            className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {migrationStatus.status === 'migrating' ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /> Migrating...</>
-            ) : (
-              <><ArrowRight className="w-5 h-5" /> Migrate to Supabase</>
-            )}
-          </button>
+          <h2 className="text-lg font-semibold text-[#1A1A2E] mb-4">Supabase Status</h2>
+          <p className="text-gray-600 mb-4">
+            Your app is configured to use Supabase as the database. Once the schema is created in Supabase, all data will be stored there.
+          </p>
 
           {migrationStatus.message && (
             <div className={`mt-4 p-4 rounded-xl ${migrationStatus.status === 'done' ? 'bg-green-50 text-green-800' : migrationStatus.status === 'error' ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'}`}>

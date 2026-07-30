@@ -1,7 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+const supabaseUrl = (() => {
+  const val = import.meta.env.VITE_SUPABASE_URL;
+  if (val && val.startsWith('http')) return val;
+  return 'https://uvtedewjjkulnkthwcmk.supabase.co';
+})();
+const supabaseAnonKey = (() => {
+  const val = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  if (val && val.length > 10) return val;
+  return 'sb_publishable_ythzGuzXHUW_T8vPqEONBA_C3au-5Je';
+})();
 
 export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey, {
@@ -73,7 +81,6 @@ export async function migrateVaultItems(items: any[]): Promise<MigrationResult> 
 
   const result: MigrationResult = { success: true, migrated: 0, failed: 0, errors: [] };
 
-  // Insert vault items
   for (const item of items) {
     const { error } = await supabase
       .from('vault_items')
