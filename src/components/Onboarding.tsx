@@ -51,37 +51,41 @@ export function OnboardingPage() {
         onboarding_completed: true,
       });
       
-      // Update local state
-      setProfile({
+      // Update local state - this will trigger the App to re-render and show Home
+      const updatedProfile = {
         ...profile,
         full_name: name.trim(),
         state,
         occupation_category: occupation,
         preferred_language: language,
         onboarding_completed: true,
-      });
+      };
       
-      // Update app language
+      setProfile(updatedProfile);
       setAppLanguage(language);
       
-      // Redirect to home immediately
-      window.location.hash = '/';
-      window.location.reload();
+      // Navigate to home
+      navigate('/');
+      
     } catch (error) {
       console.error('Onboarding update failed:', error);
+      
       // Even if DB update fails, proceed with local state
       // so user can get into the app
-      setProfile({
+      const updatedProfile = {
         ...profile,
         full_name: name.trim(),
         state,
         occupation_category: occupation,
         preferred_language: language,
         onboarding_completed: true,
-      });
+      };
+      
+      setProfile(updatedProfile);
       setAppLanguage(language);
-      window.location.hash = '/';
-      window.location.reload();
+      navigate('/');
+    } finally {
+      setLoading(false);
     }
   }
 

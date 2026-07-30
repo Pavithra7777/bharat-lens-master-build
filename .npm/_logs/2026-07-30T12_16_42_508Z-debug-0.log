@@ -1,13 +1,13 @@
-0 verbose cli /usr/bin/node /usr/bin/npm
+0 verbose cli /usr/bin/node /usr/lib/node_modules/npm/bin/npm-cli.js
 1 info using npm@10.9.8
 2 info using node@v22.22.3
 3 silly config load:file:/usr/lib/node_modules/npm/npmrc
 4 silly config load:file:/work/.npmrc
 5 silly config load:file:/usr/etc/npmrc
-6 verbose title npm run build
-7 verbose argv "run" "build"
-8 verbose logfile logs-max:10 dir:/work/.npm/_logs/2026-07-29T02_57_32_034Z-
-9 verbose logfile /work/.npm/_logs/2026-07-29T02_57_32_034Z-debug-0.log
+6 verbose title npm exec vite build
+7 verbose argv "exec" "--" "vite" "build"
+8 verbose logfile logs-max:10 dir:/work/.npm/_logs/2026-07-30T12_16_42_508Z-
+9 verbose logfile /work/.npm/_logs/2026-07-30T12_16_42_508Z-debug-0.log
 10 silly logfile start cleaning logs, removing 1 files
 11 silly logfile done cleaning log files
 12 verbose cwd /work

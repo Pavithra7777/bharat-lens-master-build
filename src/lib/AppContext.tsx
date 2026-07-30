@@ -61,23 +61,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function checkAuth() {
+    console.log('[AppContext] checkAuth starting...');
     try {
       const { user: currentUser } = await sbAuth.getUser();
+      console.log('[AppContext] Auth check result:', currentUser ? 'user found' : 'no user');
+      
       if (currentUser) {
         setUserState(currentUser);
         await loadOrCreateProfile(currentUser.id);
       }
-    } catch (error) {
-      if (error?.code !== 'PGRST205') console.error('Auth check failed:', error);
+    } catch (err: any) {
+      console.log('[AppContext] Auth check failed:', err?.message || err);
+      // If auth check fails, just proceed as logged out
+      // This allows the auth page to show
     } finally {
+      console.log('[AppContext] Setting isLoading to false');
       setIsLoading(false);
     }
   }
 
   async function loadOrCreateProfile(userId: string) {
+    console.log('[AppContext] Loading profile for:', userId);
     try {
-      // First try to read profile
       const data = await db.getProfile(userId);
+      console.log('[AppContext] Profile loaded:', data ? 'yes' : 'no');
 
       if (data) {
         setProfile(data as Profile);
@@ -85,38 +92,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLanguageState((data.preferred_language || 'en') as Language);
         if (data.id) await loadFamilyMembers(data.id);
       } else {
-        // Create new profile — upsertProfile sets created_by from auth
         const newProfile = await db.upsertProfile({
           id: userId,
           full_name: 'User',
           preferred_language: 'en',
           onboarding_completed: false,
-          created_by: userId,
         });
         if (newProfile) {
           setProfile(newProfile as Profile);
         }
       }
-    } catch (error) {
-      if (error?.code !== 'PGRST205') console.error('Load/create profile failed:', error);
-      // Fallback: create a local profile when database is unavailable
-      // This allows the app to proceed through onboarding even without DB
-      const fallbackProfile = {
+    } catch (err: any) {
+      console.log('[AppContext] Profile load failed:', err?.message || err);
+      // Create fallback profile so user can proceed to onboarding
+      setProfile({
         id: userId,
         full_name: '',
         phone: null,
-        preferred_language: 'en' as Language,
-        state: '',
+        preferred_language: 'en',
+        state: null,
         district: null,
-        date_of_birth: null,
-        occupation_category: '',
+        occupation_category: null,
         simple_mode_enabled: false,
         onboarding_completed: false,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        created_by: userId,
-      };
-      setProfile(fallbackProfile);
+      });
     }
   }
 
@@ -138,8 +138,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }));
         setFamilyMembers(mapped);
       }
-    } catch (error) {
-      if (error?.code !== 'PGRST205') console.error('Load family members failed:', error);
+    } catch (err) {
+      console.error('Load family members failed:', err);
     }
   }
 
