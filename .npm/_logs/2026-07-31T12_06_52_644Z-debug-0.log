@@ -1,0 +1,16 @@
+0 verbose cli /usr/bin/node /usr/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@10.9.8
+2 info using node@v22.22.3
+3 silly config load:file:/usr/lib/node_modules/npm/npmrc
+4 silly config load:file:/work/.npmrc
+5 silly config load:file:/usr/etc/npmrc
+6 verbose title npm exec ts-node -e import { db } from '@doable/data'; (async () => { const r = await db.query('SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = \'profiles\' ORDER BY ordinal_position'); console.log(JSON.stringify(r, null, 2)); })()
+7 verbose argv "exec" "--yes" "--" "ts-node" "-e" "import { db } from '@doable/data'; (async () => { const r = await db.query('SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = \\'profiles\\' ORDER BY ordinal_position'); console.log(JSON.stringify(r, null, 2)); })()"
+8 verbose logfile logs-max:10 dir:/work/.npm/_logs/2026-07-31T12_06_52_644Z-
+9 verbose logfile /work/.npm/_logs/2026-07-31T12_06_52_644Z-debug-0.log
+10 silly logfile start cleaning logs, removing 1 files
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:271581184 maxSize:67895296 maxEntrySize:33947648
+13 verbose shrinkwrap failed to load node_modules/.package-lock.json out of date, updated: node_modules/@doable
+14 http fetch GET https://registry.npmjs.org/ts-node attempt 1 failed with EAI_AGAIN
+15 http fetch GET https://registry.npmjs.org/ts-node attempt 2 failed with EAI_AGAIN
