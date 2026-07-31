@@ -1,3 +1,4 @@
+import { parsePgArray } from '../lib/parsePostgresArray';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '@doable/data';
 import { ai, type ChatMessage } from '@doable/ai';
@@ -206,10 +207,10 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
     
     // Build scheme text from category, professions, and title/description
     const schemeCategory = (scheme as Scheme).category?.toLowerCase() || (scheme as AISchemeSearchResult).category?.toLowerCase() || '';
-    const schemeProfessions = ((scheme as Scheme).professions || []).map((p: string) => p.toLowerCase());
+    const schemeProfessions = parsePgArray((scheme as Scheme).professions).map((p: string) => p.toLowerCase());
     const schemeTitle = (scheme as Scheme).title?.toLowerCase() || (scheme as AISchemeSearchResult).title?.toLowerCase() || '';
     const schemeDesc = (scheme as AISchemeSearchResult).description?.toLowerCase() || '';
-    const schemeTags = ((scheme as Scheme).tags || []).map((t: string) => t.toLowerCase());
+    const schemeTags = parsePgArray((scheme as Scheme).tags).map((t: string) => t.toLowerCase());
     const schemeText = [schemeCategory, ...schemeProfessions, schemeTitle, schemeDesc, ...schemeTags].join(' ');
     
     // Check if ANY keyword appears in the scheme text (partial match)
@@ -223,7 +224,7 @@ Return 5-10 most important new schemes. If no new schemes found, return an empty
       if (profile.state) profileKeywords.push(profile.state.toLowerCase());
       
       return schemes.filter(scheme => {
-        const schemeText = `${scheme.category} ${scheme.title} ${scheme.professions?.join(' ') || ''} ${scheme.category_eligible?.join(' ') || ''} ${scheme.applicable_states?.join(' ') || ''}`.toLowerCase();
+        const schemeText = `${scheme.category} ${scheme.title} ${parsePgArray(scheme.professions).join(' ') || ''} ${parsePgArray(scheme.category_eligible).join(' ') || ''} ${parsePgArray(scheme.applicable_states).join(' ') || ''}`.toLowerCase();
         return profileKeywords.some(k => schemeText.includes(k)) || profileKeywords.length === 0;
       });
     }

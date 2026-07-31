@@ -47,9 +47,9 @@ export function SettingsPage() {
     setSubmitting(true);
     try {
       await db.query(
-        `INSERT INTO feedback (feedback_type, title, url, description, created_by)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [reportType, reportTitle.trim(), reportUrl.trim(), reportDescription.trim(), profile?.id || 'anonymous']
+        `INSERT INTO feedback (feedback_type, title, url, description)
+         VALUES ($1, $2, $3, $4)`,
+        [reportType, reportTitle.trim(), reportUrl.trim(), reportDescription.trim()]
       );
       setReportSubmitted(true);
       setTimeout(() => {

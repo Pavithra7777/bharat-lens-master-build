@@ -1,3 +1,4 @@
+import { parsePgArray } from '../lib/parsePostgresArray';
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from '../lib/Router';
 import { useApp } from '../lib/AppContext';
@@ -181,9 +182,9 @@ export function HomePage() {
                             )}
                           </div>
                           <p className="text-xs text-gray-500 mt-1 line-clamp-2">{scheme.description}</p>
-                          {scheme.tag && scheme.tag.length > 0 && (
+                          {parsePgArray(scheme.tag).length > 0 && (
                             <div className="flex gap-1 mt-2 flex-wrap">
-                              {scheme.tag.slice(0, 3).map((tag, i) => (
+                              {parsePgArray(scheme.tag).slice(0, 3).map((tag, i) => (
                                 <span key={i} className="text-xs bg-[#F0F4FF] text-[#1B3A6B] px-2 py-0.5 rounded-full">{tag}</span>
                               ))}
                             </div>

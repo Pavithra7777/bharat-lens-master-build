@@ -1,3 +1,4 @@
+import { parsePgArray } from '../lib/parsePostgresArray';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from '../lib/Router';
 import { db } from '@doable/data';
@@ -130,9 +131,9 @@ export function SchemeDetailPage() {
             <p className="text-white/70 text-sm mt-1">{scheme.department || scheme.ministry || 'Government Scheme'}</p>
           </div>
         </div>
-        {scheme.tags && scheme.tags.length > 0 && (
+        {parsePgArray(scheme.tags).length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
-            {scheme.tags.slice(0, 4).map((tag, i) => (
+            {parsePgArray(scheme.tags).slice(0, 4).map((tag, i) => (
               <span key={i} className="px-2 py-1 bg-white/10 text-white/90 text-xs rounded-full">{tag}</span>
             ))}
           </div>
@@ -190,11 +191,11 @@ export function SchemeDetailPage() {
                 <p className="text-sm text-gray-600 leading-relaxed">{scheme.short_benefit}</p>
               </div>
             )}
-            {scheme.required_documents && scheme.required_documents.length > 0 && (
+            {scheme.required_documents && parsePgArray(scheme.required_documents).length > 0 && (
               <div className="bg-white rounded-xl shadow-sm p-4">
                 <h3 className="font-semibold text-[#1A1A2E] mb-3">Required Documents</h3>
                 <div className="space-y-2">
-                  {scheme.required_documents.map((doc, i) => (
+                  {parsePgArray(scheme.required_documents).map((doc, i) => (
                     <div key={i} className="flex items-start gap-2">
                       <FileCheck className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                       <span className="text-sm text-gray-600">{doc}</span>
@@ -229,19 +230,19 @@ export function SchemeDetailPage() {
               {scheme.category && <div className="bg-gray-50 rounded-lg p-3"><div className="text-xs text-gray-500">Category</div><div className="text-sm font-medium text-[#1A1A2E] capitalize">{scheme.category}</div></div>}
               {scheme.domicile_required !== null && <div className="bg-gray-50 rounded-lg p-3"><div className="text-xs text-gray-500">Domicile</div><div className="text-sm font-medium text-[#1A1A2E]">{scheme.domicile_required ? 'Required' : 'Not Required'}</div></div>}
             </div>
-            {scheme.professions && scheme.professions.length > 0 && (
+            {parsePgArray(scheme.professions).length > 0 && (
               <div className="mt-4">
                 <div className="text-xs text-gray-500 mb-2">Eligible Professions</div>
                 <div className="flex flex-wrap gap-2">
-                  {scheme.professions.map((prof, i) => <span key={i} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">{prof}</span>)}
+                  {parsePgArray(scheme.professions).map((prof, i) => <span key={i} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full">{prof}</span>)}
                 </div>
               </div>
             )}
-            {scheme.applicable_states && scheme.applicable_states.length > 0 && (
+            {parsePgArray(scheme.applicable_states).length > 0 && (
               <div className="mt-4">
                 <div className="text-xs text-gray-500 mb-2">Applicable States</div>
                 <div className="flex flex-wrap gap-2">
-                  {scheme.applicable_states.map((state, i) => <span key={i} className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">{state}</span>)}
+                  {parsePgArray(scheme.applicable_states).map((state, i) => <span key={i} className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full">{state}</span>)}
                 </div>
               </div>
             )}
@@ -272,11 +273,11 @@ export function SchemeDetailPage() {
               <button onClick={() => setShowFull(!showFull)} className="text-sm text-[#1B3A6B] font-medium">{showFull ? 'Show Less' : 'Show More'}</button>
             </div>
             <p className={`text-sm text-gray-600 leading-relaxed ${!showFull && 'line-clamp-3'}`}>{howToApplyText}</p>
-            {scheme.application_mode && scheme.application_mode.length > 0 && (
+            {parsePgArray(scheme.application_mode).length > 0 && (
               <div className="mt-4">
                 <div className="text-xs text-gray-500 mb-2">Application Modes</div>
                 <div className="flex flex-wrap gap-2">
-                  {scheme.application_mode.map((mode, i) => <span key={i} className="px-3 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">{mode}</span>)}
+                  {parsePgArray(scheme.application_mode).map((mode, i) => <span key={i} className="px-3 py-1 bg-purple-50 text-purple-700 text-xs rounded-full">{mode}</span>)}
                 </div>
               </div>
             )}
@@ -336,12 +337,12 @@ function buildEligibilityText(scheme: Scheme): string {
   if (scheme.income_limit) parts.push(`Maximum annual income: Rs.${scheme.income_limit.toLocaleString()}.`);
   if (scheme.gender) parts.push(`Gender: ${scheme.gender}.`);
   if (scheme.domicile_required) parts.push("State domicile may be required.");
-  if (scheme.professions && scheme.professions.length > 0) parts.push(`Eligible professions: ${scheme.professions.join(', ')}.`);
-  if (scheme.applicable_states && scheme.applicable_states.length > 0) {
-    if (scheme.applicable_states.includes('All India')) {
+  if (parsePgArray(scheme.professions).length > 0) parts.push(`Eligible professions: ${parsePgArray(scheme.professions).join(', ')}.`);
+  if (parsePgArray(scheme.applicable_states).length > 0) {
+    if (parsePgArray(scheme.applicable_states).includes('All India')) {
       parts.push("Applicable across all states of India.");
     } else {
-      parts.push(`Applicable in: ${scheme.applicable_states.slice(0, 5).join(', ')}${scheme.applicable_states.length > 5 ? ' and more' : ''}.`);
+      parts.push(`Applicable in: ${parsePgArray(scheme.applicable_states).slice(0, 5).join(', ')}${parsePgArray(scheme.applicable_states).length > 5 ? ' and more' : ''}.`);
     }
   }
   return parts.length > 0 ? parts.join(' ') : 'Please check the official website for detailed eligibility criteria.';
@@ -364,11 +365,11 @@ function buildBenefitsText(scheme: Scheme): string {
 
 function buildHowToApplyText(scheme: Scheme): string {
   const parts: string[] = [];
-  if (scheme.application_mode && scheme.application_mode.length > 0) parts.push(`Application Mode: ${scheme.application_mode.join(', ')}.`);
+  if (parsePgArray(scheme.application_mode).length > 0) parts.push(`Application Mode: ${parsePgArray(scheme.application_mode).join(', ')}.`);
   parts.push("Visit the official website or nearest CSC (Common Service Centre) to apply.");
   if (scheme.apply_url) parts.push("Click the 'Apply Now' button above to start your application.");
-  if (scheme.required_documents && scheme.required_documents.length > 0) {
-    parts.push(`Documents needed: ${scheme.required_documents.slice(0, 5).join(', ')}${scheme.required_documents.length > 5 ? ', and more' : ''}.`);
+  if (scheme.required_documents && parsePgArray(scheme.required_documents).length > 0) {
+    parts.push(`Documents needed: ${parsePgArray(scheme.required_documents).slice(0, 5).join(', ')}${parsePgArray(scheme.required_documents).length > 5 ? ', and more' : ''}.`);
   }
   if (scheme.helpline) parts.push(`Helpline: ${scheme.helpline}.`);
   return parts.length > 0 ? parts.join(' ') : 'Please visit the official website for application instructions.';

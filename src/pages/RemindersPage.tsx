@@ -12,7 +12,7 @@ interface Reminder {
   related_document_id: string | null;
   related_application_id: string | null;
   created_at: string;
-  created_by: string;
+  owner_id: string | null;
 }
 
 export function RemindersPage() {
