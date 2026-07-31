@@ -31,7 +31,7 @@ export function RemindersPage() {
     try {
       // Query reminders filtered by current user via created_by
       const r = await db.query<Reminder>(
-        'SELECT * FROM reminders WHERE created_by = $1 ORDER BY due_date ASC',
+        'SELECT * FROM reminders WHERE owner_id = $1 ORDER BY due_date ASC',
         [user.id]
       );
       if (r.ok && r.rows) {
@@ -53,7 +53,7 @@ export function RemindersPage() {
     
     try {
       const r = await db.query<Reminder>(
-        'INSERT INTO reminders (title, due_date, created_by) VALUES ($1, $2, $3) RETURNING *',
+        'INSERT INTO reminders (title, due_date, owner_id) VALUES ($1, $2, $3) RETURNING *',
         [newTitle.trim(), newDate, user?.id]
       );
       if (r.ok && r.rows.length > 0 && r.rows[0]) {

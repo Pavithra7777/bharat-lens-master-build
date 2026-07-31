@@ -46,7 +46,7 @@ export function HomePage() {
     setLoading(true);
     try {
       const remindersRes = await db.query<Reminder>(
-        `SELECT * FROM reminders WHERE created_by = $1 AND is_completed = false ORDER BY due_date ASC LIMIT 5`,
+        `SELECT * FROM reminders WHERE owner_id = $1 AND is_completed = false ORDER BY due_date ASC LIMIT 5`,
         [user.id]
       );
       const schemesRes = await db.query<Scheme>(
