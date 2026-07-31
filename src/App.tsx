@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { AppProvider, useApp } from './lib/AppContext';
 import { RouterProvider, useRouter, Link, useNavigate } from './lib/Router';
 import { 
   Home, Camera, MessageCircle, FolderOpen, Search, 
   Calendar, Shield, Users, Settings
 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 // Static imports
 import { AuthPage } from './components/Auth';
@@ -45,12 +46,46 @@ const NAV_ITEMS_FULL = [
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 
+// Loading fallback component
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#1B3A6B] to-[#2A4A8B] flex items-center justify-center">
+      <div className="text-center text-white">
+        <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
+        <p className="text-white/70">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+// Error fallback component
+function ErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#1B3A6B] to-[#2A4A8B] flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl p-6 max-w-sm text-center shadow-xl">
+        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <span className="text-3xl">⚠️</span>
+        </div>
+        <h2 className="text-xl font-semibold text-[#1A1A2E] mb-2">Something went wrong</h2>
+        <p className="text-gray-500 text-sm mb-4">{error.message || 'An unexpected error occurred'}</p>
+        <button
+          onClick={reset}
+          className="w-full py-3 bg-[#1B3A6B] text-white rounded-xl font-medium hover:bg-[#2A4A8B] transition"
+        >
+          Try Again
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
   const { user, isLoading, profile, simpleMode } = useApp();
   const { currentPath } = useRouter();
   const navigate = useNavigate();
   const [showFullNav, setShowFullNav] = useState(false);
   const prevUserRef = useRef<typeof user>(null);
+  const [hasError, setHasError] = useState(false);
 
   // Check if current page should show bottom nav (hide on detail pages)
   const isDetailPage = currentPath.startsWith('/schemes/') && currentPath.length > 9;
@@ -65,12 +100,25 @@ function AppContent() {
 
   const navItems = showFullNav ? NAV_ITEMS_FULL : NAV_ITEMS;
 
+  // Handle error state
+  if (hasError) {
+    return (
+      <ErrorFallback 
+        error={new Error('An error occurred while loading the app')} 
+        reset={() => {
+          setHasError(false);
+          window.location.reload();
+        }} 
+      />
+    );
+  }
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#FAFBFC] flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-[#1B3A6B]/20 border-t-[#1B3A6B] rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Loading...</p>
+      <div className="min-h-screen bg-gradient-to-b from-[#1B3A6B] to-[#2A4A8B] flex items-center justify-center">
+        <div className="text-center text-white">
+          <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-white/70">Loading Bharat Lens...</p>
         </div>
       </div>
     );
@@ -212,7 +260,22 @@ function PageRouter({ currentPath }: { currentPath: string }) {
   }
 }
 
-export default function App() {
+// Wrap AppContent with error handling
+function AppWithErrorBoundary() {
+  const [error, setError] = useState<Error | null>(null);
+
+  if (error) {
+    return (
+      <ErrorFallback 
+        error={error} 
+        reset={() => {
+          setError(null);
+          window.location.reload();
+        }} 
+      />
+    );
+  }
+
   return (
     <AppProvider>
       <RouterProvider>
@@ -220,4 +283,8 @@ export default function App() {
       </RouterProvider>
     </AppProvider>
   );
+}
+
+export default function App() {
+  return <AppWithErrorBoundary />;
 }
