@@ -173,7 +173,15 @@ export function ScamPage() {
   return (
     <div className="min-h-screen bg-[#FAFBFC] pb-24">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-6 pt-12 pb-6">
+      <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-4 pt-12 pb-4">
+        <div className="flex items-center justify-between mb-2">
+          <button onClick={() => window.history.back()} className="p-2 -ml-2 rounded-lg hover:bg-white/10 text-white">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+          <a href="#/" className="p-2 -mr-2 rounded-lg hover:bg-white/10 text-white">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+          </a>
+        </div>
         <div className="flex items-center gap-3 mb-2">
           <Shield className="w-8 h-8 text-white" />
           <h1 className="text-2xl font-bold text-white">Scam Shield</h1>
