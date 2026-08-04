@@ -43,25 +43,19 @@ function AppContent() {
     return <OnboardingPage />;
   }
 
-  // Routes that should have bottom nav
-  const bottomNavRoutes = ['/', '/schemes', '/scan', '/chat', '/vault'];
-
-  const hasBottomNav = bottomNavRoutes.includes(currentPath) || 
-    currentPath.startsWith('/schemes');
-
-  // Pages with their own built-in headers
-  const ownHeaderPages = ['/settings', '/scam'];
+  // Pages that have their own footer padding (they already account for bottom nav)
+  const pagesWithOwnPadding = ['/scan', '/scam', '/settings', '/vault'];
 
   // Main authenticated app
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
       {/* Main content */}
-      <div className={`flex-1 ${hasBottomNav ? 'pb-20' : ''}`}>
+      <div className={`flex-1 ${pagesWithOwnPadding.includes(currentPath) ? '' : 'pb-20'}`}>
         <MainContent />
       </div>
 
-      {/* Bottom Navigation */}
-      {hasBottomNav && <BottomNav />}
+      {/* Bottom Navigation - always show after login */}
+      <BottomNav />
     </div>
   );
 }
