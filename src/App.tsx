@@ -14,7 +14,6 @@ import { ScamPage } from './pages/ScamPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { FamilyPage } from './pages/FamilyPage';
 import { BottomNav } from './components/BottomNav';
-import { Header } from './components/Header';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
@@ -46,22 +45,18 @@ function AppContent() {
 
   // Routes that should have bottom nav
   const bottomNavRoutes = ['/', '/schemes', '/scan', '/chat', '/vault'];
-  const hasBottomNav = bottomNavRoutes.includes(currentPath) || 
-    (currentPath.startsWith('/schemes') && currentPath !== '/schemes');
 
-  // Simple header pages (that have back navigation)
-  const simpleHeaderPages = ['/applications', '/reminders', '/scam', '/settings', '/family'];
+  const hasBottomNav = bottomNavRoutes.includes(currentPath) || 
+    currentPath.startsWith('/schemes');
+
+  // Pages with their own built-in headers
+  const ownHeaderPages = ['/settings', '/scam'];
 
   // Main authenticated app
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
-      {/* Header for pages that need it */}
-      {simpleHeaderPages.some(route => currentPath.startsWith(route)) && (
-        <Header title={getHeaderTitle(currentPath)} showBack={true} />
-      )}
-
       {/* Main content */}
-      <div className="flex-1 pb-20">
+      <div className={`flex-1 ${hasBottomNav ? 'pb-20' : ''}`}>
         <MainContent />
       </div>
 
@@ -69,15 +64,6 @@ function AppContent() {
       {hasBottomNav && <BottomNav />}
     </div>
   );
-}
-
-function getHeaderTitle(path: string): string {
-  if (path.startsWith('/applications')) return 'My Applications';
-  if (path.startsWith('/reminders')) return 'Reminders';
-  if (path.startsWith('/scam')) return 'Scam Shield';
-  if (path.startsWith('/settings')) return 'Settings';
-  if (path.startsWith('/family')) return 'Family';
-  return '';
 }
 
 function MainContent() {
