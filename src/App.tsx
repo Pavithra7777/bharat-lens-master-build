@@ -1,83 +1,153 @@
-import React, { useState, useEffect } from 'react';
+import { AppProvider, useApp } from './lib/AppContext';
+import { RouterProvider, useRouter } from './lib/Router';
+import { AuthPage } from './components/Auth';
+import { OnboardingPage } from './components/Onboarding';
+import { HomePage } from './pages/HomePage';
+import { SchemesPage } from './pages/SchemesPage';
+import { SchemeDetailPage } from './pages/SchemeDetailPage';
+import { ScanPage } from './pages/ScanPage';
+import { ChatPage } from './pages/ChatPage';
+import { VaultPage } from './pages/VaultPage';
+import { ApplicationsPage } from './pages/ApplicationsPage';
+import { RemindersPage } from './pages/RemindersPage';
+import { ScamPage } from './pages/ScamPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { FamilyPage } from './pages/FamilyPage';
+import { BottomNav } from './components/BottomNav';
+import { Header } from './components/Header';
+import { Loader2 } from 'lucide-react';
 
-// Simple test app - minimal version to debug
-export default function App() {
-  const [status, setStatus] = useState('Initializing...');
-  const [error, setError] = useState<string | null>(null);
+function AppContent() {
+  const { isLoading, user, profile } = useApp();
+  const { currentPath } = useRouter();
 
-  useEffect(() => {
-    setStatus('App mounted successfully!');
-  }, []);
-
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #1B3A6B 0%, #2A4A8B 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      padding: '20px'
-    }}>
-      <div style={{
-        background: 'white',
-        borderRadius: '24px',
-        padding: '40px',
-        maxWidth: '400px',
-        width: '100%',
-        textAlign: 'center',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-      }}>
-        <div style={{
-          width: '80px',
-          height: '80px',
-          background: 'linear-gradient(135deg, #1B3A6B 0%, #2A4A8B 100%)',
-          borderRadius: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 24px',
-          fontSize: '40px'
-        }}>
-          🇮🇳
+  // Show loading spinner
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#1B3A6B] to-[#2A4A8B] flex flex-col items-center justify-center">
+        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-lg">
+          <span className="text-3xl">🇮🇳</span>
         </div>
-        
-        <h1 style={{
-          fontSize: '28px',
-          fontWeight: '700',
-          color: '#1A1A2E',
-          marginBottom: '8px'
-        }}>
-          Bharat Lens
-        </h1>
-        
-        <p style={{
-          fontSize: '14px',
-          color: '#64748B',
-          marginBottom: '24px'
-        }}>
-          One AI. Every Citizen. Every Service.
-        </p>
-        
-        <div style={{
-          background: error ? '#FEE2E2' : '#ECFDF5',
-          color: error ? '#DC2626' : '#059669',
-          padding: '16px',
-          borderRadius: '12px',
-          marginBottom: '24px',
-          fontSize: '14px'
-        }}>
-          {error || status}
-        </div>
-        
-        <div style={{
-          fontSize: '12px',
-          color: '#94A3B8',
-          marginTop: '16px'
-        }}>
-          App is loading... Please wait.
-        </div>
+        <Loader2 className="w-8 h-8 text-white animate-spin" />
+        <p className="text-white/70 mt-4 text-sm">Loading...</p>
       </div>
+    );
+  }
+
+  // Show auth page if not logged in
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  // Show onboarding if profile not completed
+  if (!profile?.onboarding_completed) {
+    return <OnboardingPage />;
+  }
+
+  // Routes that should have bottom nav
+  const bottomNavRoutes = ['/', '/schemes', '/scan', '/chat', '/vault'];
+  const hasBottomNav = bottomNavRoutes.includes(currentPath) || 
+    (currentPath.startsWith('/schemes') && currentPath !== '/schemes');
+
+  // Simple header pages (that have back navigation)
+  const simpleHeaderPages = ['/applications', '/reminders', '/scam', '/settings', '/family'];
+
+  // Main authenticated app
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
+      {/* Header for pages that need it */}
+      {simpleHeaderPages.some(route => currentPath.startsWith(route)) && (
+        <Header title={getHeaderTitle(currentPath)} showBack={true} />
+      )}
+
+      {/* Main content */}
+      <div className="flex-1 pb-20">
+        <MainContent />
+      </div>
+
+      {/* Bottom Navigation */}
+      {hasBottomNav && <BottomNav />}
     </div>
+  );
+}
+
+function getHeaderTitle(path: string): string {
+  if (path.startsWith('/applications')) return 'My Applications';
+  if (path.startsWith('/reminders')) return 'Reminders';
+  if (path.startsWith('/scam')) return 'Scam Shield';
+  if (path.startsWith('/settings')) return 'Settings';
+  if (path.startsWith('/family')) return 'Family';
+  return '';
+}
+
+function MainContent() {
+  const { currentPath } = useRouter();
+
+  // Home
+  if (currentPath === '/' || currentPath === '') {
+    return <HomePage />;
+  }
+
+  // Schemes list
+  if (currentPath === '/schemes' || currentPath.startsWith('/schemes?')) {
+    return <SchemesPage />;
+  }
+
+  // Scheme detail
+  if (currentPath.match(/^\/schemes\/[^/]+$/) || currentPath.match(/^\/schemes\/[^/]+\?/)) {
+    return <SchemeDetailPage />;
+  }
+
+  // Scan
+  if (currentPath === '/scan') {
+    return <ScanPage />;
+  }
+
+  // Chat
+  if (currentPath === '/chat') {
+    return <ChatPage />;
+  }
+
+  // Vault
+  if (currentPath === '/vault') {
+    return <VaultPage />;
+  }
+
+  // Applications
+  if (currentPath === '/applications') {
+    return <ApplicationsPage />;
+  }
+
+  // Reminders
+  if (currentPath === '/reminders') {
+    return <RemindersPage />;
+  }
+
+  // Scam
+  if (currentPath === '/scam') {
+    return <ScamPage />;
+  }
+
+  // Settings
+  if (currentPath === '/settings') {
+    return <SettingsPage />;
+  }
+
+  // Family
+  if (currentPath === '/family') {
+    return <FamilyPage />;
+  }
+
+  // Default to home
+  return <HomePage />;
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <RouterProvider>
+        <AppContent />
+      </RouterProvider>
+    </AppProvider>
   );
 }
