@@ -78,7 +78,7 @@ export function SettingsPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-4 pt-12 pb-4">
         <div className="flex items-center justify-between mb-2">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-lg hover:bg-white/10 text-white">
+          <button onClick={() => navigate('/')} className="p-2 -ml-2 rounded-lg hover:bg-white/10 text-white">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <button onClick={() => navigate('/')} className="p-2 -mr-2 rounded-lg hover:bg-white/10 text-white">

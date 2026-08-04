@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useRouter } from '../lib/Router';
 import { Shield, AlertTriangle, CheckCircle, HelpCircle, Upload, FileText, Link as LinkIcon, Loader2 } from 'lucide-react';
 
 type Verdict = 'safe' | 'suspicious' | 'danger' | 'review';
@@ -22,6 +23,7 @@ const SCAM_PATTERNS = [
 ];
 
 export function ScamPage() {
+  const { navigate } = useRouter();
   const [inputType, setInputType] = useState<'text' | 'image'>('text');
   const [input, setInput] = useState('');
   const [checking, setChecking] = useState(false);
@@ -175,7 +177,7 @@ export function ScamPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-4 pt-12 pb-4">
         <div className="flex items-center justify-between mb-2">
-          <button onClick={() => window.history.back()} className="p-2 -ml-2 rounded-lg hover:bg-white/10 text-white">
+          <button onClick={() => navigate('/')} className="p-2 -ml-2 rounded-lg hover:bg-white/10 text-white">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           </button>
           <a href="#/" className="p-2 -mr-2 rounded-lg hover:bg-white/10 text-white">
