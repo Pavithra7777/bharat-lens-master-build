@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '@doable/data';
 import { useApp } from '../lib/AppContext';
 import { Link } from '../lib/Router';
-import { FolderOpen, FileText, CreditCard, Car, Home, Trash2, Eye, Calendar, IdCard, Sparkles, AlertTriangle, FileCheck, ExternalLink, Info } from 'lucide-react';
+import { FolderOpen, FileText, CreditCard, Car, Home, Trash2, Eye, Calendar, IdCard, Sparkles, AlertTriangle, FileCheck, ExternalLink, Info, Plus, X, Save, ChevronRight } from 'lucide-react';
 
 interface vaultItem {
   id: string;
@@ -12,6 +12,13 @@ interface vaultItem {
   item_type: string | null;
   metadata: any;
   created_at: string;
+}
+
+interface NewItemForm {
+  title: string;
+  description: string;
+  category: string;
+  notes: string;
 }
 
 // Helper function to check if a string is a valid URL
@@ -25,12 +32,36 @@ function isValidUrl(string: string): boolean {
   }
 }
 
+const CATEGORIES = [
+  { value: 'document', label: 'General Document', icon: FileText },
+  { value: 'aadhaar', label: 'Aadhaar Card', icon: CreditCard },
+  { value: 'pan', label: 'PAN Card', icon: FileText },
+  { value: 'passport', label: 'Passport', icon: IdCard },
+  { value: 'license', label: 'License', icon: Car },
+  { value: 'certificate', label: 'Certificate', icon: FileText },
+  { value: 'land_record', label: 'Land Record', icon: Home },
+  { value: 'ration', label: 'Ration Card', icon: FileText },
+  { value: 'voter_id', label: 'Voter ID', icon: IdCard },
+  { value: 'bank', label: 'Bank Document', icon: FileText },
+  { value: 'insurance', label: 'Insurance', icon: FileText },
+  { value: 'other', label: 'Other', icon: FileText },
+];
+
 export function VaultPage() {
   const [items, setItems] = useState<vaultItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [selectedItem, setSelectedItem] = useState<vaultItem | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const { profile } = useApp();
+
+  const [newItem, setNewItem] = useState<NewItemForm>({
+    title: '',
+    description: '',
+    category: 'document',
+    notes: '',
+  });
 
   useEffect(() => {
     loadItems();
@@ -39,7 +70,6 @@ export function VaultPage() {
   async function loadItems() {
     setLoading(true);
     try {
-      // Query vault_items - RLS handles owner filtering via created_by
       const r = await db.query<vaultItem>(
         `SELECT id, title, description, category, item_type, metadata, created_at 
          FROM vault_items ORDER BY created_at DESC`
@@ -51,6 +81,43 @@ export function VaultPage() {
       console.error('Load vault items failed:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAddItem() {
+    if (!newItem.title.trim()) {
+      alert('Please enter a title');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const metadata = newItem.notes ? { notes: newItem.notes } : {};
+      
+      const r = await db.query<{ id: string }>(
+        `INSERT INTO vault_items (title, description, category, item_type, metadata) 
+         VALUES ($1, $2, $3, $4, $5) 
+         RETURNING id, title, description, category, item_type, metadata, created_at`,
+        [
+          newItem.title.trim(),
+          newItem.description.trim() || null,
+          newItem.category,
+          'manual',
+          JSON.stringify(metadata),
+        ]
+      );
+
+      if (r.ok && r.rows && r.rows.length > 0) {
+        // Reload to get complete item
+        await loadItems();
+        setShowAddModal(false);
+        setNewItem({ title: '', description: '', category: 'document', notes: '' });
+      }
+    } catch (error) {
+      console.error('Add item failed:', error);
+      alert('Failed to save item. Please try again.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -73,16 +140,8 @@ export function VaultPage() {
       if (meta.schemes_found?.length > 0) return Sparkles;
       return FileCheck;
     }
-    switch (item.category) {
-      case 'document': return FileText;
-      case 'aadhaar': return CreditCard;
-      case 'pan': return FileText;
-      case 'passport': return IdCard;
-      case 'license': return Car;
-      case 'certificate': return FileText;
-      case 'land_record': return Home;
-      default: return FileText;
-    }
+    const cat = CATEGORIES.find(c => c.value === item.category);
+    return cat?.icon || FileText;
   }
 
   function getItemColor(item: vaultItem) {
@@ -106,8 +165,18 @@ export function VaultPage() {
     <div className="min-h-screen bg-[#FAFBFC] pb-24">
       {/* Header */}
       <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2A4A8B] px-6 pt-12 pb-6">
-        <h1 className="text-2xl font-bold text-white">My Vault</h1>
-        <p className="text-white/70 mt-1">Your saved scans and documents</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">My Vault</h1>
+            <p className="text-white/70 mt-1">Your saved documents and scans</p>
+          </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-lg"
+          >
+            <Plus className="w-6 h-6 text-[#1B3A6B]" />
+          </button>
+        </div>
         
         {/* View Toggle */}
         <div className="flex gap-2 mt-4">
@@ -143,13 +212,13 @@ export function VaultPage() {
               <FolderOpen className="w-10 h-10 text-gray-400" />
             </div>
             <h3 className="text-lg font-medium text-[#1A1A2E] mb-2">Vault is empty</h3>
-            <p className="text-gray-500 mb-6">Scan documents or analyze schemes to save them here</p>
-            <Link
-              to="/scan"
+            <p className="text-gray-500 mb-6">Add documents or scan to save them here</p>
+            <button
+              onClick={() => setShowAddModal(true)}
               className="inline-flex items-center gap-2 px-6 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium"
             >
-              Scan Document
-            </Link>
+              <Plus className="w-5 h-5" /> Add Document
+            </button>
           </div>
         ) : view === 'grid' ? (
           <div className="grid grid-cols-2 gap-4">
@@ -219,12 +288,139 @@ export function VaultPage() {
                       {item.description || 'No description'}
                     </p>
                   </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
                 </button>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Floating Add Button */}
+      {items.length > 0 && (
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="fixed bottom-24 right-6 w-14 h-14 bg-[#1B3A6B] text-white rounded-full shadow-lg flex items-center justify-center hover:bg-[#2A4A8B] transition z-40"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* Add Item Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+          <div className="bg-white rounded-t-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-[#1A1A2E]">
+                Add Document
+              </h2>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Title *
+                </label>
+                <input
+                  type="text"
+                  value={newItem.title}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="e.g., My Aadhaar Card"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1B3A6B]/30 focus:border-[#1B3A6B]"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Category
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {CATEGORIES.map((cat) => {
+                    const Icon = cat.icon;
+                    return (
+                      <button
+                        key={cat.value}
+                        type="button"
+                        onClick={() => setNewItem(prev => ({ ...prev, category: cat.value }))}
+                        className={`p-3 rounded-xl border-2 flex flex-col items-center gap-2 transition ${
+                          newItem.category === cat.value
+                            ? 'border-[#1B3A6B] bg-[#1B3A6B]/5'
+                            : 'border-gray-100 hover:border-gray-200'
+                        }`}
+                      >
+                        <Icon className={`w-5 h-5 ${newItem.category === cat.value ? 'text-[#1B3A6B]' : 'text-gray-400'}`} />
+                        <span className={`text-xs text-center ${newItem.category === cat.value ? 'text-[#1B3A6B] font-medium' : 'text-gray-500'}`}>
+                          {cat.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={newItem.description}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description of the document..."
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1B3A6B]/30 focus:border-[#1B3A6B] resize-none"
+                />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Additional Notes
+                </label>
+                <textarea
+                  value={newItem.notes}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Any additional notes or details..."
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1B3A6B]/30 focus:border-[#1B3A6B] resize-none"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 py-3 border border-gray-200 text-gray-700 rounded-xl font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddItem}
+                  disabled={saving || !newItem.title.trim()}
+                  className="flex-1 py-3 bg-[#1B3A6B] text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {saving ? (
+                    'Saving...'
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      Save
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Item Detail Modal */}
       {selectedItem && (
@@ -243,10 +439,41 @@ export function VaultPage() {
             </div>
             
             <div className="p-6 space-y-6">
+              {/* Category badge */}
+              {selectedItem.category && (
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const cat = CATEGORIES.find(c => c.value === selectedItem.category);
+                    const Icon = cat?.icon || FileText;
+                    return (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1B3A6B]/10 text-[#1B3A6B] rounded-full text-sm font-medium">
+                          <Icon className="w-4 h-4" />
+                          {cat?.label || selectedItem.category}
+                        </span>
+                        {selectedItem.item_type === 'manual' && (
+                          <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                            Manual Entry
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
               {selectedItem.description && (
                 <div className="bg-[#1B3A6B]/5 rounded-xl p-4">
                   <h3 className="font-medium text-[#1B3A6B] mb-2">Description</h3>
                   <p className="text-gray-600">{selectedItem.description}</p>
+                </div>
+              )}
+
+              {/* Notes */}
+              {selectedItem.metadata?.notes && (
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h3 className="font-medium text-gray-700 mb-2">Notes</h3>
+                  <p className="text-gray-600">{selectedItem.metadata.notes}</p>
                 </div>
               )}
 
@@ -265,7 +492,7 @@ export function VaultPage() {
                             {scheme.benefits && <p className="text-sm text-gray-600 mt-2">{scheme.benefits}</p>}
                             {scheme.eligibility && <p className="text-sm text-gray-500 mt-2">Eligibility: {scheme.eligibility}</p>}
                             
-                            {/* Apply Link - Fixed to handle both URLs and text instructions */}
+                            {/* Apply Link */}
                             {scheme.apply_url && (
                               <div className="mt-3">
                                 {isValidUrl(scheme.apply_url) ? (
@@ -286,7 +513,7 @@ export function VaultPage() {
                               </div>
                             )}
                             
-                            {/* Official URL - also check for valid URL */}
+                            {/* Official URL */}
                             {scheme.official_url && isValidUrl(scheme.official_url) && (
                               <div className="mt-2">
                                 <a 
@@ -358,7 +585,7 @@ export function VaultPage() {
                 </Link>
                 <button
                   onClick={() => deleteItem(selectedItem.id)}
-                  className="w-14 h-14 border-2 border-red-200 text-red-500 rounded-xl flex items-center justify-center"
+                  className="w-14 h-14 border-2 border-red-200 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-50 transition"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>

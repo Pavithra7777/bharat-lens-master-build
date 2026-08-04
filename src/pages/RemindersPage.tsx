@@ -12,7 +12,7 @@ interface Reminder {
   related_document_id: string | null;
   related_application_id: string | null;
   created_at: string;
-  owner_id: string | null;
+  created_by: string;
 }
 
 export function RemindersPage() {
@@ -22,17 +22,16 @@ export function RemindersPage() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'calendar'>('list');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState('');
 
   const loadReminders = useCallback(async () => {
-    if (!user) { setLoading(false); return; }
     setLoading(true);
     try {
-      // Query reminders filtered by current user via created_by
+      // Query all reminders - RLS handles owner filtering via created_by
       const r = await db.query<Reminder>(
-        'SELECT * FROM reminders WHERE owner_id = $1 ORDER BY due_date ASC',
-        [user.id]
+        'SELECT * FROM reminders ORDER BY due_date ASC'
       );
       if (r.ok && r.rows) {
         setReminders(r.rows);
@@ -42,21 +41,29 @@ export function RemindersPage() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     loadReminders();
   }, [loadReminders]);
 
   async function addReminder() {
-    if (!newTitle.trim() || !newDate) return;
+    if (!newTitle.trim() || !newDate) {
+      alert('Please enter a title and due date');
+      return;
+    }
     
+    setSaving(true);
     try {
+      // Insert without owner_id - created_by defaults from session
       const r = await db.query<Reminder>(
-        'INSERT INTO reminders (title, due_date, owner_id) VALUES ($1, $2, $3) RETURNING *',
-        [newTitle.trim(), newDate, user?.id]
+        `INSERT INTO reminders (title, due_date) 
+         VALUES ($1, $2) 
+         RETURNING *`,
+        [newTitle.trim(), newDate]
       );
-      if (r.ok && r.rows.length > 0 && r.rows[0]) {
+      
+      if (r.ok && r.rows && r.rows.length > 0) {
         const newReminder = r.rows[0];
         setReminders(prev => {
           const updated = [...prev, newReminder];
@@ -64,12 +71,19 @@ export function RemindersPage() {
             new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
           );
         });
+        // Clear form and close modal
         setNewTitle('');
         setNewDate('');
         setShowAddModal(false);
+      } else {
+        console.error('Insert failed - no rows returned');
+        alert('Failed to save reminder. Please try again.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Add reminder failed:', error);
+      alert('Failed to save reminder. Please try again.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -79,7 +93,7 @@ export function RemindersPage() {
         'UPDATE reminders SET is_completed = $1 WHERE id = $2 RETURNING *',
         [!currentStatus, id]
       );
-      if (r.ok && r.rows.length > 0) {
+      if (r.ok && r.rows && r.rows.length > 0) {
         setReminders(prev =>
           prev.map(rem =>
             rem.id === id ? { ...rem, is_completed: !currentStatus } : rem
@@ -139,7 +153,10 @@ export function RemindersPage() {
     <div className="min-h-screen bg-[#FAFBFC]">
       <header className="bg-[#1B3A6B] text-white p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">Reminders</h1>
+          <div>
+            <h1 className="text-xl font-bold">Reminders</h1>
+            <p className="text-white/70 text-sm">{reminders.length} total reminders</p>
+          </div>
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 bg-white/20 px-3 py-2 rounded-lg hover:bg-white/30 transition-colors"
@@ -262,7 +279,7 @@ export function RemindersPage() {
             <h2 className="text-xl font-bold text-[#1A1A2E] mb-4">New Reminder</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                 <input
                   type="text"
                   value={newTitle}
@@ -272,7 +289,7 @@ export function RemindersPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Due Date *</label>
                 <input
                   type="date"
                   value={newDate}
@@ -283,17 +300,28 @@ export function RemindersPage() {
             </div>
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setNewTitle('');
+                  setNewDate('');
+                }}
                 className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={addReminder}
-                disabled={!newTitle.trim() || !newDate}
-                className="flex-1 px-4 py-3 rounded-xl bg-[#1B3A6B] text-white font-medium hover:bg-[#2a4a8a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={saving || !newTitle.trim() || !newDate}
+                className="flex-1 px-4 py-3 rounded-xl bg-[#1B3A6B] text-white font-medium hover:bg-[#2a4a8a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Save
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </button>
             </div>
           </div>
