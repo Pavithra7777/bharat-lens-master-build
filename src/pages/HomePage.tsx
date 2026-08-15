@@ -46,16 +46,35 @@ export function HomePage() {
     if (!user) { setLoading(false); return; }
     setLoading(true);
     try {
-      const remindersRes = await db.query<Reminder>(
-        `SELECT * FROM reminders WHERE owner_id = $1 AND is_completed = false ORDER BY due_date ASC LIMIT 5`,
-        [user.id]
-      );
-      const schemesRes = await db.query<Scheme>(
-        `SELECT id, title as name, category, description, short_benefit as benefits, null as deadline, tags as tag, official_url as official_link FROM schemes WHERE is_active = true ORDER BY created_at DESC LIMIT 6`,
-        []
-      );
-      if (remindersRes.ok && remindersRes.rows) setReminders(remindersRes.rows);
-      if (schemesRes.ok && schemesRes.rows) setSchemes(schemesRes.rows);
+      // Load reminders with fallback
+      let remindersData: Reminder[] = [];
+      try {
+        const remindersRes = await db.query<Reminder>(
+          `SELECT * FROM reminders WHERE owner_id = $1 AND is_completed = false ORDER BY due_date ASC LIMIT 5`,
+          [user.id]
+        );
+        if (remindersRes.ok && remindersRes.rows) {
+          remindersData = remindersRes.rows;
+        }
+      } catch (e) {
+        console.warn('Reminders query failed:', e);
+      }
+      setReminders(remindersData);
+
+      // Load schemes with fallback
+      let schemesData: Scheme[] = [];
+      try {
+        const schemesRes = await db.query<Scheme>(
+          `SELECT id, title as name, category, description, short_benefit as benefits, null as deadline, tags as tag, official_url as official_link FROM schemes WHERE is_active = true ORDER BY created_at DESC LIMIT 6`,
+          []
+        );
+        if (schemesRes.ok && schemesRes.rows) {
+          schemesData = schemesRes.rows;
+        }
+      } catch (e) {
+        console.warn('Schemes query failed:', e);
+      }
+      setSchemes(schemesData);
     } catch (error) {
       console.error('Home data load failed:', error);
     } finally {
